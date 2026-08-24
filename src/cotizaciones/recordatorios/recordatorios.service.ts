@@ -33,6 +33,11 @@ import {
 } from './fecha-disparo.calc';
 import { Cliente } from '../../clientes/schemas/cliente.schema';
 
+function nonemptyOrNull(value: string | undefined | null): string | null {
+  const t = typeof value === 'string' ? value.trim() : '';
+  return t || null;
+}
+
 function isDuplicateKeyError(err: unknown): boolean {
   return (
     typeof err === 'object' &&
@@ -200,7 +205,7 @@ export class RecordatoriosService {
         this.assertPuedeReprogramar(raced);
       }
       throw new ConflictException(
-        'Esta cotización ya tiene un aviso.',
+        'Esta cotización ya tiene un recordatorio.',
       );
     }
   }
@@ -242,11 +247,11 @@ export class RecordatoriosService {
       .exec();
     if (!existing) {
       throw new NotFoundException(
-        'No hay un aviso programado en esta cotización',
+        'No hay un recordatorio programado en esta cotización',
       );
     }
     throw new BadRequestException(
-      'Solo se puede quitar un aviso que todavía no ha salido.',
+      'Solo se puede quitar un recordatorio que todavía no ha llegado.',
     );
   }
 
@@ -363,7 +368,9 @@ export class RecordatoriosService {
     const cotizacionIds = docs.map((d) => d.cotizacionId);
     const cotizaciones = await this.cotizacionModel
       .find({ _id: { $in: cotizacionIds }, tenantId })
-      .select('folio clienteId nombreContacto')
+      .select(
+        'folio clienteId nombreContacto telefonoContacto emailContacto fechaCreacion nombreEmpresa',
+      )
       .lean()
       .exec();
 
@@ -388,27 +395,34 @@ export class RecordatoriosService {
 
     const zonaHoraria = await this.resolveZonaHoraria(tenantId);
 
-    const items = docs.map((doc) => {
+    const items = docs.flatMap((doc) => {
       const cot = cotById.get(String(doc.cotizacionId));
+      if (!cot) return [];
       const cliente =
-        cot?.clienteId != null
+        cot.clienteId != null
           ? clienteById.get(String(cot.clienteId))
           : undefined;
-      return {
-        recordatorioId: String(doc._id),
-        cotizacionId: String(doc.cotizacionId),
-        folio: typeof cot?.folio === 'string' ? cot.folio : '',
-        identidad: resolveIdentidadDisparada(
-          cliente?.empresa,
-          cot?.nombreContacto,
-        ),
-        fechaDisparo: doc.fechaDisparoUtc,
-        recetaResumen: formatRecetaResumen(
-          doc.receta,
-          doc.fechaDisparoUtc,
-          zonaHoraria,
-        ),
-      };
+      return [
+        {
+          recordatorioId: String(doc._id),
+          cotizacionId: String(doc.cotizacionId),
+          folio: typeof cot.folio === 'string' ? cot.folio : '',
+          identidad: resolveIdentidadDisparada(
+            cliente?.empresa || cot.nombreEmpresa,
+            cot.nombreContacto,
+          ),
+          fechaDisparo: doc.fechaDisparoUtc,
+          recetaResumen: formatRecetaResumen(
+            doc.receta,
+            doc.fechaDisparoUtc,
+            zonaHoraria,
+          ),
+          nombreContacto: nonemptyOrNull(cot.nombreContacto),
+          telefonoContacto: nonemptyOrNull(cot.telefonoContacto),
+          emailContacto: nonemptyOrNull(cot.emailContacto),
+          fechaCreacion: cot.fechaCreacion ?? null,
+        },
+      ];
     });
 
     return { items };
@@ -445,7 +459,7 @@ export class RecordatoriosService {
       );
     }
     throw new BadRequestException(
-      'Solo se puede marcar como atendido un aviso que ya te llegó.',
+      'Solo se puede marcar como atendido un seguimiento que ya te llegó.',
     );
   }
 
@@ -518,7 +532,9 @@ export class RecordatoriosService {
         _id: recordatorio.cotizacionId,
         tenantId: recordatorio.tenantId,
       })
-      .select('folio creadoPorEmail creadoPorUserId tenantId')
+      .select(
+        'folio creadoPorEmail creadoPorUserId tenantId clienteId nombreEmpresa nombreContacto telefonoContacto emailContacto fechaCreacion',
+      )
       .lean()
       .exec();
 
@@ -542,10 +558,36 @@ export class RecordatoriosService {
       return;
     }
 
+    let nombreCliente = nonemptyOrNull(cotizacion.nombreEmpresa);
+    if (!nombreCliente && cotizacion.clienteId) {
+      const cliente = await this.clienteModel
+        .findOne({
+          _id: cotizacion.clienteId,
+          tenantId: recordatorio.tenantId,
+        })
+        .select('empresa')
+        .lean()
+        .exec();
+      nombreCliente = nonemptyOrNull(cliente?.empresa);
+    }
+    if (!nombreCliente) {
+      nombreCliente =
+        nonemptyOrNull(cotizacion.nombreContacto) ?? 'este cliente';
+    }
+
+    const zonaHoraria = await this.resolveZonaHoraria(recordatorio.tenantId);
+
     await this.emailsService.sendReminderRecotizacionDisparo({
       tenantId: recordatorio.tenantId,
       to: recipients,
       folio,
+      cotizacionId: String(recordatorio.cotizacionId),
+      nombreCliente,
+      nombreContacto: nonemptyOrNull(cotizacion.nombreContacto),
+      telefonoContacto: nonemptyOrNull(cotizacion.telefonoContacto),
+      emailContacto: nonemptyOrNull(cotizacion.emailContacto),
+      fechaCreacion: cotizacion.fechaCreacion ?? null,
+      zonaHoraria,
       fromOverride,
     });
 
@@ -640,17 +682,17 @@ export class RecordatoriosService {
   private assertPuedeReprogramar(doc: RecordatorioRecotizacionDocument): void {
     if (doc.everDisparado === true) {
       throw new ConflictException(
-        'Ya te avisamos de esta cotización. No se puede programar otro aviso aquí.',
+        'Ya te recordamos esta cotización. No se puede programar otro recordatorio aquí.',
       );
     }
     if (doc.estado === 'disparado' || doc.estado === 'cerrado') {
       throw new ConflictException(
-        'Este aviso ya no se puede cambiar. Lo encuentras en Pendientes de recotizar o ya lo marcaste como atendido.',
+        'Este seguimiento ya no se puede cambiar. Lo encuentras en Seguimientos pendientes o ya lo marcaste como atendido.',
       );
     }
     if (doc.estado !== 'programado' && doc.estado !== 'cancelado') {
       throw new BadRequestException(
-        'No se puede guardar este aviso en su estado actual.',
+        'No se puede guardar este recordatorio en su estado actual.',
       );
     }
   }

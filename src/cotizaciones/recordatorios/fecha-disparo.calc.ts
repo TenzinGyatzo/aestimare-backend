@@ -111,7 +111,7 @@ export function calcularFechaDisparoUtc(params: {
       return {
         ok: false,
         code: 'invalid_receta',
-        message: 'Elige dentro de cuánto tiempo te avisamos.',
+        message: 'Elige dentro de cuánto tiempo quieres el recordatorio.',
       };
     }
     // Relativos a hoy siempre producen futuro (presets ≥ 1 mes).
@@ -126,7 +126,7 @@ export function calcularFechaDisparoUtc(params: {
       return {
         ok: false,
         code: 'invalid_receta',
-        message: 'Elige con cuánta anticipación te avisamos.',
+        message: 'Elige con cuánta anticipación quieres el recordatorio.',
       };
     }
     if (!params.fechaCreacion) {
@@ -166,7 +166,7 @@ export function calcularFechaDisparoUtc(params: {
       return {
         ok: false,
         code: 'invalid_receta',
-        message: 'Elige el día en que quieres el aviso.',
+        message: 'Elige el día en que quieres el recordatorio.',
       };
     }
     const parsed =
@@ -185,7 +185,7 @@ export function calcularFechaDisparoUtc(params: {
     return {
       ok: false,
       code: 'invalid_receta',
-      message: 'Elige cómo quieres que te avisemos.',
+      message: 'Elige cómo quieres recibir el recordatorio.',
     };
   }
 

@@ -36,6 +36,33 @@ export class RecordatorioDisparadoItemDto {
     example: '3 meses',
   })
   recetaResumen: string;
+
+  @ApiPropertyOptional({
+    description: 'Nombre del contacto snapshot de la cotización',
+    example: 'Luis Zavala',
+    nullable: true,
+  })
+  nombreContacto: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Teléfono del contacto snapshot',
+    example: '6681234567',
+    nullable: true,
+  })
+  telefonoContacto: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Correo del contacto snapshot',
+    example: 'luis@aitsa.mx',
+    nullable: true,
+  })
+  emailContacto: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Fecha de creación de la cotización original',
+    nullable: true,
+  })
+  fechaCreacion: Date | null;
 }
 
 export class RecordatoriosDisparadosResponseDto {

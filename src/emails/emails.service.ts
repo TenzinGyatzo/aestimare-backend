@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
@@ -305,6 +306,23 @@ export class EmailsService {
       .replace(/'/g, '&#39;');
   }
 
+  private formatFechaLargaEs(
+    raw?: Date | string | null,
+    zonaHoraria?: string | null,
+  ): string | null {
+    if (raw == null || raw === '') return null;
+    const zone =
+      typeof zonaHoraria === 'string' && zonaHoraria.trim()
+        ? zonaHoraria.trim()
+        : 'America/Mexico_City';
+    const dt =
+      raw instanceof Date
+        ? DateTime.fromJSDate(raw, { zone: 'utc' }).setZone(zone)
+        : DateTime.fromISO(String(raw), { zone: 'utc' }).setZone(zone);
+    if (!dt.isValid) return null;
+    return dt.setLocale('es-MX').toFormat("d 'de' MMMM 'de' yyyy");
+  }
+
   private formatVigencia(date: Date): string {
     const d = new Date(date);
     if (Number.isNaN(d.getTime())) return '';
@@ -380,6 +398,13 @@ export class EmailsService {
     tenantId: Types.ObjectId | string;
     to: string[];
     folio: string;
+    cotizacionId: string;
+    nombreCliente: string;
+    nombreContacto?: string | null;
+    telefonoContacto?: string | null;
+    emailContacto?: string | null;
+    fechaCreacion?: Date | string | null;
+    zonaHoraria?: string | null;
     fromOverride?: string;
   }): Promise<void> {
     const to = (params.to || [])
@@ -400,14 +425,38 @@ export class EmailsService {
     }
 
     const dashboardUrl = `${frontendUrl.replace(/\/+$/, '')}/admin#recordatorios-disparados`;
+    const detalleUrl = `${frontendUrl.replace(/\/+$/, '')}/admin/cotizaciones/${encodeURIComponent(params.cotizacionId)}?volverACotizar=1`;
     const safeFolio = this.escapeHtml(params.folio || '');
+    const safeCliente = this.escapeHtml(params.nombreCliente || 'este cliente');
     const safeDashboardUrl = this.escapeHtml(dashboardUrl);
+    const safeDetalleUrl = this.escapeHtml(detalleUrl);
+    const fechaCreacionLabel = this.formatFechaLargaEs(
+      params.fechaCreacion,
+      params.zonaHoraria,
+    );
     const html = reminderRecotizacionDisparoTemplate({
       folio: safeFolio,
+      nombreCliente: safeCliente,
       dashboardUrl: safeDashboardUrl,
+      detalleUrl: safeDetalleUrl,
+      nombreContacto: params.nombreContacto
+        ? this.escapeHtml(params.nombreContacto)
+        : null,
+      telefonoContacto: params.telefonoContacto
+        ? this.escapeHtml(params.telefonoContacto)
+        : null,
+      emailContacto: params.emailContacto
+        ? this.escapeHtml(params.emailContacto)
+        : null,
+      fechaCreacionLabel: fechaCreacionLabel
+        ? this.escapeHtml(fechaCreacionLabel)
+        : null,
     });
+    const subjectCliente = this.sanitizeSubjectPart(
+      params.nombreCliente || 'este cliente',
+    );
     const subjectFolio = this.sanitizeSubjectPart(params.folio || '');
-    const subject = `Recordatorio de recotización · ${subjectFolio}`;
+    const subject = `Es momento de contactar a ${subjectCliente} · ${subjectFolio}`;
 
     const { transporter: tenantTransporter, emailUser } =
       await this.createTenantTransporter(params.tenantId);

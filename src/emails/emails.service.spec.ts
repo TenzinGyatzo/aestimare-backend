@@ -564,13 +564,19 @@ describe('EmailsService.sendReminderRecotizacionDisparo (Story 10.1)', () => {
       tenantId: TENANT_ID,
       to: ['a@ames.test'],
       folio: 'COT-42',
+      cotizacionId: '507f1f77bcf86cd799439012',
+      nombreCliente: 'AITSA',
+      nombreContacto: 'Luis Zavala',
+      telefonoContacto: '6681234567',
+      emailContacto: 'luis@aitsa.mx',
+      fechaCreacion: new Date('2026-08-07T18:00:00.000Z'),
       fromOverride: 'remitente@tenant.test',
     });
 
     expect(tenantConfig.getOutboundSmtpAuth).toHaveBeenCalledWith(TENANT_ID);
     expect(sendEmail).toHaveBeenCalledWith(
       ['a@ames.test'],
-      'Recordatorio de recotización · COT-42',
+      'Es momento de contactar a AITSA · COT-42',
       expect.any(String),
       undefined,
       undefined,
@@ -580,8 +586,17 @@ describe('EmailsService.sendReminderRecotizacionDisparo (Story 10.1)', () => {
     );
     const html = sendEmail.mock.calls[0][2] as string;
     expect(html).toContain('COT-42');
-    expect(html).toContain('Contacta');
+    expect(html).toContain('AITSA');
+    expect(html).toContain('Luis Zavala');
+    expect(html).toContain('Ver seguimiento en Aestimare');
+    expect(html).toContain('Volver a cotizar');
     expect(html).toContain('http://localhost:5173/admin#recordatorios-disparados');
+    expect(html).toContain(
+      'http://localhost:5173/admin/cotizaciones/507f1f77bcf86cd799439012?volverACotizar=1',
+    );
+    expect(html).not.toContain('recotizar');
+    expect(html).not.toContain('recordatorios disparados');
+    expect(html).not.toContain('correo interno');
   });
 
   it('tenant inactivo rechaza envío', async () => {
@@ -595,6 +610,8 @@ describe('EmailsService.sendReminderRecotizacionDisparo (Story 10.1)', () => {
         tenantId: TENANT_ID,
         to: ['a@ames.test'],
         folio: 'COT-1',
+        cotizacionId: 'id-1',
+        nombreCliente: 'Acme',
       }),
     ).rejects.toBeInstanceOf(TenantInactiveForOutboundError);
   });
@@ -611,6 +628,8 @@ describe('EmailsService.sendReminderRecotizacionDisparo (Story 10.1)', () => {
         tenantId: TENANT_ID,
         to: [],
         folio: 'COT-1',
+        cotizacionId: 'id-1',
+        nombreCliente: 'Acme',
       }),
     ).rejects.toThrow(/destinatario/);
     expect(tenantConfig.getOutboundSmtpAuth).not.toHaveBeenCalled();
@@ -623,20 +642,28 @@ describe('EmailsService.sendReminderRecotizacionDisparo (Story 10.1)', () => {
         tenantId: TENANT_ID,
         to: ['a@ames.test'],
         folio: 'COT-1',
+        cotizacionId: 'id-1',
+        nombreCliente: 'Acme',
       }),
     ).rejects.toThrow(/FRONTEND_URL/);
   });
 });
 
 describe('reminderRecotizacionDisparoTemplate', () => {
-  it('incluye folio y enlace dashboard', () => {
+  it('incluye folio, cliente y CTAs', () => {
     const html = reminderRecotizacionDisparoTemplate({
       folio: 'COT-99',
+      nombreCliente: 'AITSA',
       dashboardUrl: 'https://app.test/admin#recordatorios-disparados',
+      detalleUrl: 'https://app.test/admin/cotizaciones/abc?volverACotizar=1',
+      nombreContacto: 'Luis',
     });
     expect(html).toContain('COT-99');
-    expect(html).toContain('recordatorios-disparados');
-    expect(html).toContain('Contacta');
+    expect(html).toContain('AITSA');
+    expect(html).toContain('Ver seguimiento en Aestimare');
+    expect(html).toContain('Volver a cotizar');
+    expect(html).toContain('únicamente para tu equipo');
+    expect(html).not.toContain('recotizar');
   });
 });
 

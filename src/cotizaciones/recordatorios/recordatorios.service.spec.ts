@@ -594,15 +594,19 @@ describe('RecordatoriosService cron disparo (Story 10.1)', () => {
       { $set: { estado: 'disparado', everDisparado: true } },
       { new: true },
     );
-    expect(emailsService.sendReminderRecotizacionDisparo).toHaveBeenCalledWith({
-      tenantId,
-      to: expect.arrayContaining([
-        'creator@tenant.test',
-        'notify@tenant.test',
-      ]),
-      folio: 'COT-100',
-      fromOverride: 'remitente@tenant.test',
-    });
+    expect(emailsService.sendReminderRecotizacionDisparo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        to: expect.arrayContaining([
+          'creator@tenant.test',
+          'notify@tenant.test',
+        ]),
+        folio: 'COT-100',
+        cotizacionId: String(cotizacionId),
+        nombreCliente: 'este cliente',
+        fromOverride: 'remitente@tenant.test',
+      }),
+    );
   });
 
   it('procesarDisparoRecordatorio: no-match → sin email', async () => {
@@ -864,6 +868,10 @@ describe('RecordatoriosService disparados + cerrar (Story 10.2)', () => {
       identidad: 'Acme Corp',
       fechaDisparo: fechaDisparoUtc,
       recetaResumen: '3 meses',
+      nombreContacto: 'Ana',
+      telefonoContacto: null,
+      emailContacto: null,
+      fechaCreacion: null,
     });
   });
 
