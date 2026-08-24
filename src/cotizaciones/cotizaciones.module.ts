@@ -3,6 +3,12 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CotizacionesService } from './cotizaciones.service';
 import { CotizacionesController } from './cotizaciones.controller';
 import { Cotizacion, CotizacionSchema } from './schemas/cotizacion.schema';
+import { Cliente, ClienteSchema } from '../clientes/schemas/cliente.schema';
+import {
+  RecordatorioRecotizacion,
+  RecordatorioRecotizacionSchema,
+} from './recordatorios/schemas/recordatorio-recotizacion.schema';
+import { RecordatoriosService } from './recordatorios/recordatorios.service';
 import { ClientesModule } from '../clientes/clientes.module';
 import { ServiciosModule } from '../servicios/servicios.module';
 import { EmailService } from './services/email.service';
@@ -15,6 +21,11 @@ import { UsersModule } from '../users/users.module';
   imports: [
     MongooseModule.forFeature([
       { name: Cotizacion.name, schema: CotizacionSchema },
+      { name: Cliente.name, schema: ClienteSchema },
+      {
+        name: RecordatorioRecotizacion.name,
+        schema: RecordatorioRecotizacionSchema,
+      },
     ]),
     forwardRef(() => ClientesModule),
     ServiciosModule,
@@ -24,7 +35,7 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [CotizacionesController],
-  providers: [CotizacionesService, EmailService],
-  exports: [CotizacionesService, EmailService],
+  providers: [CotizacionesService, EmailService, RecordatoriosService],
+  exports: [CotizacionesService, EmailService, RecordatoriosService],
 })
 export class CotizacionesModule {}

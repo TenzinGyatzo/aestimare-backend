@@ -702,6 +702,18 @@ describe('TenantConfigService (Stories 2.1–2.5 + 3.2)', () => {
     expect(res.defaultUsarVigencia).toBe(true);
   });
 
+  it('toResponse incluye zonaHoraria IANA (Story 9.1 / AD-30)', () => {
+    const doc = {
+      ...makeDoc(tenantId),
+      zonaHoraria: ' America/Mexico_City ',
+    } as any;
+    const res = service.toResponse(doc);
+    expect(res.zonaHoraria).toBe('America/Mexico_City');
+    expect(
+      service.toResponse(makeDoc(tenantId) as any).zonaHoraria,
+    ).toBeUndefined();
+  });
+
   it('toResponseAsync incluye tenantNombre y tenantClave del Tenant efectivo', async () => {
     tenantStore.set(String(tenantId), {
       nombre: 'AMES Querétaro',

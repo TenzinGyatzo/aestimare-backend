@@ -139,6 +139,13 @@ export class TenantConfigResponseDto {
   })
   defaultUsarVigencia?: boolean | null;
 
+  @ApiPropertyOptional({
+    description:
+      'Zona IANA del Reloj del tenant (AD-30). Ausente hasta backfill; service usa America/Mexico_City.',
+    example: 'America/Mexico_City',
+  })
+  zonaHoraria?: string;
+
   @ApiPropertyOptional()
   createdAt?: string;
 

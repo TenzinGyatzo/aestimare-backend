@@ -13,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { parseOptionalQueryBoolean } from '../../common/parse-optional-query-boolean';
+import { RecetaRecordatorioDto } from '../recordatorios/dto/receta-recordatorio.dto';
 
 export const MODOS_PRECIOS_REPETIR = ['originales', 'actualizados'] as const;
 export type ModoPreciosRepetir = (typeof MODOS_PRECIOS_REPETIR)[number];
@@ -87,4 +88,25 @@ export class RepetirCotizacionDto {
   @Transform(parseOptionalQueryBoolean)
   @IsBoolean()
   cancelarOriginal?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Story 11.1 / AD-34: si true, crea recordatorio programado en la COT nueva (Toque FE en 11.2)',
+    example: false,
+  })
+  @IsOptional()
+  @Transform(parseOptionalQueryBoolean)
+  @IsBoolean()
+  rearmarRecordatorio?: boolean;
+
+  @ApiPropertyOptional({
+    type: RecetaRecordatorioDto,
+    description:
+      'Obligatorio si rearmarRecordatorio=true y familia fecha_exacta. Opcional en desfase (copia origen).',
+  })
+  @ValidateIf((o: RepetirCotizacionDto) => o.rearmarRecordatorio === true)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecetaRecordatorioDto)
+  recetaRecordatorio?: RecetaRecordatorioDto;
 }

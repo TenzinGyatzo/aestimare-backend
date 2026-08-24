@@ -51,6 +51,8 @@ import { ESTADOS_COTIZACION, EstadoCotizacion } from './dto/cambiar-estado.dto';
 import { RepetirCotizacionDto } from './dto/repetir-cotizacion.dto';
 import { RepetirCotizacionPreviewDto } from './dto/repetir-cotizacion-preview.dto';
 import { RepetirCotizacionResponseDto } from './dto/repetir-cotizacion-response.dto';
+import { RecordatoriosService } from './recordatorios/recordatorios.service';
+import { RecetaRecordatorioDto } from './recordatorios/dto/receta-recordatorio.dto';
 import { CreateNotaInternaDto } from './dto/create-nota-interna.dto';
 import { UpdateNotaInternaDto } from './dto/update-nota-interna.dto';
 import { hasBancariosUtiles } from '../tenants/bancarios.util';
@@ -77,6 +79,7 @@ export class CotizacionesService {
     private plantillasService: PlantillasService,
     private usersService: UsersService,
     private tenantsService: TenantsService,
+    private recordatoriosService: RecordatoriosService,
   ) {}
 
   private escapeRegex(term: string): string {
@@ -1009,6 +1012,14 @@ export class CotizacionesService {
     const fuente = (await this.findOne(id)) as any;
     this.assertFuenteRepetible(fuente);
 
+    let recetaRearme: RecetaRecordatorioDto | undefined;
+    if (dto.rearmarRecordatorio === true) {
+      recetaRearme = await this.recordatoriosService.resolveRecetaRearme(
+        id,
+        dto.recetaRecordatorio,
+      );
+    }
+
     const tenantId = this.tenantContext.getTenantId();
     const { items, total, warnings } = await this.buildRepetirItems(
       fuente,
@@ -1043,6 +1054,13 @@ export class CotizacionesService {
         sinVigencia ? undefined : dto.fechaVencimiento,
         { sinVigencia },
       );
+
+    if (recetaRearme) {
+      await this.recordatoriosService.assertRecetaRearmeValida(
+        recetaRearme,
+        fechaCreacion,
+      );
+    }
 
     const emailsPara = Array.isArray(fuente.emailsPara)
       ? [...fuente.emailsPara]
@@ -1103,8 +1121,30 @@ export class CotizacionesService {
     }
 
     const cotizacion = await this.findOne((saved as any)._id.toString());
+    const nuevaCotizacionId = (saved as any)._id.toString();
     let originalCancelada = false;
     let originalCancelacionError: string | undefined;
+
+    try {
+      await this.recordatoriosService.cancelarPorRepetir(id);
+    } catch (err) {
+      this.logger.warn(
+        `Repetir OK pero falló cancelar recordatorio origen ${id}: ${this.extractErrorMessage(err, 'error desconocido')}`,
+      );
+    }
+
+    if (recetaRearme) {
+      try {
+        await this.recordatoriosService.programarEnCotizacionNueva(
+          nuevaCotizacionId,
+          recetaRearme,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Repetir OK pero falló rearmar recordatorio en ${nuevaCotizacionId}: ${this.extractErrorMessage(err, 'error desconocido')}`,
+        );
+      }
+    }
 
     if (dto.cancelarOriginal === true) {
       try {

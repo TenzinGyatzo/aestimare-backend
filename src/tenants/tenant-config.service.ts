@@ -16,10 +16,7 @@ import { TenantContextService } from './tenant-context.service';
 import { UpdateTenantBrandingDto } from './dto/update-tenant-branding.dto';
 import { UpdateTenantEmailDto } from './dto/update-tenant-email.dto';
 import { UpdateTenantVigenciaBancariosDto } from './dto/update-tenant-vigencia-bancarios.dto';
-import {
-  encryptSecret,
-  TenantSecretsKeyError,
-} from './tenant-secrets.crypto';
+import { encryptSecret, TenantSecretsKeyError } from './tenant-secrets.crypto';
 import {
   ensureDir,
   unlinkQuiet,
@@ -259,11 +256,9 @@ export class TenantConfigService {
     if (Object.keys($unset).length) update.$unset = $unset;
 
     const updated = await this.withEmailSecret(
-      this.tenantConfigModel.findOneAndUpdate(
-        { tenantId },
-        update,
-        { new: true },
-      ),
+      this.tenantConfigModel.findOneAndUpdate({ tenantId }, update, {
+        new: true,
+      }),
     ).exec();
     if (!updated) {
       throw new BadRequestException('No se pudo actualizar branding');
@@ -374,11 +369,9 @@ export class TenantConfigService {
     if (Object.keys($unset).length) update.$unset = $unset;
 
     const updated = await this.withEmailSecret(
-      this.tenantConfigModel.findOneAndUpdate(
-        { tenantId },
-        update,
-        { new: true },
-      ),
+      this.tenantConfigModel.findOneAndUpdate({ tenantId }, update, {
+        new: true,
+      }),
     ).exec();
     if (!updated) {
       throw new BadRequestException(
@@ -458,11 +451,9 @@ export class TenantConfigService {
     if (Object.keys($unset).length) update.$unset = $unset;
 
     const updated = await this.withEmailSecret(
-      this.tenantConfigModel.findOneAndUpdate(
-        { tenantId },
-        update,
-        { new: true },
-      ),
+      this.tenantConfigModel.findOneAndUpdate({ tenantId }, update, {
+        new: true,
+      }),
     ).exec();
     if (!updated) {
       throw new BadRequestException(
@@ -584,7 +575,9 @@ export class TenantConfigService {
     return {
       _id: String(obj._id),
       tenantId: String(obj.tenantId),
-      ...(identity?.tenantNombre ? { tenantNombre: identity.tenantNombre } : {}),
+      ...(identity?.tenantNombre
+        ? { tenantNombre: identity.tenantNombre }
+        : {}),
       ...(identity?.tenantClave ? { tenantClave: identity.tenantClave } : {}),
       branding: {
         logoUrl: branding.logoUrl || undefined,
@@ -632,6 +625,10 @@ export class TenantConfigService {
       defaultUsarVigencia:
         typeof obj.defaultUsarVigencia === 'boolean'
           ? obj.defaultUsarVigencia
+          : undefined,
+      zonaHoraria:
+        typeof obj.zonaHoraria === 'string' && obj.zonaHoraria.trim()
+          ? obj.zonaHoraria.trim()
           : undefined,
       createdAt: obj.createdAt
         ? new Date(obj.createdAt).toISOString()

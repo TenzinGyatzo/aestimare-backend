@@ -13,6 +13,14 @@ import { TenantSecretsKeyError } from '../tenants/tenant-secrets.crypto';
 import { TenantEmailNotConfiguredError } from '../emails/tenant-email-not-configured.error';
 import { TipoItem } from '../servicios/enums/tipo-item.enum';
 
+function stubRecordatoriosService() {
+  return {
+    cancelarPorRepetir: jest.fn().mockResolvedValue(false),
+    resolveRecetaRearme: jest.fn(),
+    programarEnCotizacionNueva: jest.fn(),
+  };
+}
+
 describe('CotizacionesService resolveVencimiento (Story 2.4)', () => {
   const tenantConfigService = {
     getForRequest: jest.fn(),
@@ -33,6 +41,7 @@ describe('CotizacionesService resolveVencimiento (Story 2.4)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -102,6 +111,7 @@ describe('CotizacionesService.resolveMagicExpiresAt (Story 6.15)', () => {
     {} as any,
     {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
 
   it('sinVigencia → fechaCreacion + 365d', () => {
@@ -162,6 +172,7 @@ describe('CotizacionesService.create — cliente inactivo (Story 3.2)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -205,6 +216,7 @@ describe('CotizacionesService.buildItems — servicio inactivo (Story 4.2)', () 
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -247,6 +259,7 @@ describe('CotizacionesService.buildItems — overrides snapshot (Story 6.4)', ()
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     serviciosService.findOne.mockResolvedValue({
       _id: new Types.ObjectId(),
@@ -371,6 +384,7 @@ describe('CotizacionesService.buildItems — tipoSnapshot/codigoSnapshot (Story 
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -506,6 +520,7 @@ describe('CotizacionesService.buildRepetirItems — tipoSnapshot (Story 6.4 tipa
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -658,6 +673,7 @@ describe('UpdateCotizacionDto — sin items (Story 6.4 / AD-22)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(existing as any);
 
@@ -704,6 +720,7 @@ describe('CotizacionesService.buildPlantillasSnapshot (Story 6.5)', () => {
       plantillasService as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -884,6 +901,7 @@ describe('CotizacionesService.createAdminCotizacion — plantillas (Story 6.5)',
       plantillasService as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
   });
@@ -1002,6 +1020,7 @@ describe('CotizacionesService.createAdminCotizacion — defaults de tenant para 
       } as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
   });
@@ -1178,6 +1197,7 @@ describe('CotizacionesService.createAdminCotizacion — defaultUsarVigencia → 
       } as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
   });
@@ -1298,6 +1318,7 @@ describe('CotizacionesService.createAdminCotizacion — destinatarios (Story 6.6
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
   });
@@ -1357,6 +1378,7 @@ describe('CotizacionesService.generateFolio (Story 6.1)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -1430,6 +1452,7 @@ describe('CotizacionesService.createAdminCotizacion flexible (Story 6.2)', () =>
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
   });
@@ -1546,6 +1569,7 @@ describe('CotizacionesService.createAdminCotizacion flexible (Story 6.2)', () =>
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
 
@@ -1582,6 +1606,7 @@ describe('CotizacionesService.createAdminCotizacion flexible (Story 6.2)', () =>
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
 
@@ -1614,6 +1639,7 @@ describe('CotizacionesService.createAdminCotizacion flexible (Story 6.2)', () =>
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
 
@@ -1651,6 +1677,7 @@ describe('CotizacionesService.findAll search escape (Story 6.3)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -1735,6 +1762,7 @@ describe('CotizacionesService.findAll clienteId (Story 3.7)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -1809,6 +1837,7 @@ describe('CotizacionesService.findAll creadoPorNombre', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -2032,6 +2061,7 @@ describe('CotizacionesService.create + enviarCorreoConPdf (Story 6.8)', () => {
       {} as any,
       {} as any,
       tenantsService as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockResolvedValue(savedDoc as any);
   });
@@ -2310,6 +2340,7 @@ describe('CotizacionesService public magic link (Story 6.9)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -2491,6 +2522,7 @@ describe('CotizacionesService cambio manual + provenance (Story 6.10)', () => {
       {} as any,
       usersService as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(service, 'findOne').mockImplementation(async () => {
       const last = ModelCtor.findOneAndUpdate.mock.calls.at(-1);
@@ -2636,6 +2668,7 @@ describe('CotizacionesService markExpiredQuotations (Story 6.11)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -2863,6 +2896,7 @@ describe('CotizacionesService repetirCotizacion (Story 6.12)', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
 
     jest.spyOn(service, 'findOne').mockImplementation(async (id: string) => {
@@ -3169,6 +3203,161 @@ describe('CotizacionesService repetirCotizacion (Story 6.12)', () => {
   });
 });
 
+describe('CotizacionesService repetirCotizacion recordatorio (Story 11.1)', () => {
+  const tenantId = new Types.ObjectId();
+  const fuenteId = new Types.ObjectId().toString();
+  const servicioId = new Types.ObjectId();
+  const nuevaId = new Types.ObjectId();
+
+  let service: CotizacionesService;
+  let savedPayload: any;
+  let recordatoriosService: {
+    cancelarPorRepetir: jest.Mock;
+    resolveRecetaRearme: jest.Mock;
+    assertRecetaRearmeValida: jest.Mock;
+    programarEnCotizacionNueva: jest.Mock;
+  };
+
+  const fuenteBase = () => ({
+    _id: fuenteId,
+    tenantId,
+    folio: 'COT-2026-0001',
+    estado: 'aceptada',
+    items: [
+      {
+        servicioId,
+        nombreServicioSnapshot: 'Snap',
+        descripcionServicioSnapshot: 'D',
+        precioUnitarioSnapshot: 100,
+        cantidad: 1,
+        subtotal: 100,
+      },
+    ],
+    plantillasSnapshot: [],
+    emailsPara: [],
+    emailsCc: [],
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    savedPayload = null;
+    recordatoriosService = {
+      cancelarPorRepetir: jest.fn().mockResolvedValue(true),
+      resolveRecetaRearme: jest.fn(),
+      assertRecetaRearmeValida: jest.fn().mockResolvedValue(undefined),
+      programarEnCotizacionNueva: jest.fn().mockResolvedValue({}),
+    };
+
+    const ModelCtor = function ModelCtor(this: any, data: any) {
+      savedPayload = data;
+      this.save = jest.fn().mockResolvedValue({
+        _id: nuevaId,
+        ...data,
+      });
+      return this;
+    };
+
+    service = new CotizacionesService(
+      ModelCtor as any,
+      { findOne: jest.fn() } as any,
+      {
+        findOne: jest.fn().mockResolvedValue({
+          _id: servicioId,
+          tenantId,
+          activo: true,
+          nombre: 'Srv',
+          precioUnitario: 100,
+          descripcion: 'd',
+        }),
+      } as any,
+      {} as any,
+      { getTenantId: jest.fn().mockReturnValue(tenantId) } as any,
+      {
+        getForRequest: jest.fn().mockResolvedValue({ vigenciaDefaultDias: 15 }),
+      } as any,
+      { nextFolio: jest.fn().mockResolvedValue('COT-2026-0099') } as any,
+      {} as any,
+      {} as any,
+      { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      recordatoriosService as any,
+    );
+
+    jest.spyOn(service, 'findOne').mockImplementation(async (id: string) => {
+      if (String(id) === String(fuenteId)) {
+        return fuenteBase() as any;
+      }
+      return {
+        _id: nuevaId,
+        folio: 'COT-2026-0099',
+        estado: 'vigente',
+      } as any;
+    });
+  });
+
+  it('siempre cancela recordatorio origen tras crear', async () => {
+    await service.repetirCotizacion(fuenteId, { modoPrecios: 'originales' });
+    expect(recordatoriosService.cancelarPorRepetir).toHaveBeenCalledWith(
+      fuenteId,
+    );
+    expect(recordatoriosService.resolveRecetaRearme).not.toHaveBeenCalled();
+    expect(recordatoriosService.programarEnCotizacionNueva).not.toHaveBeenCalled();
+  });
+
+  it('rearmar: resolve + programar en COT nueva', async () => {
+    recordatoriosService.resolveRecetaRearme.mockResolvedValue({
+      familia: 'relativo_hoy',
+      preset: '3_meses',
+    });
+    await service.repetirCotizacion(fuenteId, {
+      modoPrecios: 'originales',
+      rearmarRecordatorio: true,
+    });
+    expect(recordatoriosService.resolveRecetaRearme).toHaveBeenCalledWith(
+      fuenteId,
+      undefined,
+    );
+    expect(recordatoriosService.assertRecetaRearmeValida).toHaveBeenCalled();
+    expect(recordatoriosService.programarEnCotizacionNueva).toHaveBeenCalledWith(
+      String(nuevaId),
+      { familia: 'relativo_hoy', preset: '3_meses' },
+    );
+  });
+
+  it('rearmar: receta inválida falla antes de crear', async () => {
+    recordatoriosService.resolveRecetaRearme.mockResolvedValue({
+      familia: 'fecha_exacta',
+    });
+    recordatoriosService.assertRecetaRearmeValida.mockRejectedValue(
+      new BadRequestException('fechaExacta requerida para fecha_exacta'),
+    );
+    await expect(
+      service.repetirCotizacion(fuenteId, {
+        modoPrecios: 'originales',
+        rearmarRecordatorio: true,
+        recetaRecordatorio: { familia: 'fecha_exacta' },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(savedPayload).toBeNull();
+    expect(recordatoriosService.cancelarPorRepetir).not.toHaveBeenCalled();
+  });
+
+  it('rearmar fecha_exacta sin receta falla antes de crear', async () => {
+    recordatoriosService.resolveRecetaRearme.mockRejectedValue(
+      new BadRequestException(
+        'rearmar con fecha exacta requiere recetaRecordatorio en el body',
+      ),
+    );
+    await expect(
+      service.repetirCotizacion(fuenteId, {
+        modoPrecios: 'originales',
+        rearmarRecordatorio: true,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(savedPayload).toBeNull();
+    expect(recordatoriosService.cancelarPorRepetir).not.toHaveBeenCalled();
+  });
+});
+
 describe('CotizacionesService previewRepetirCotizacion', () => {
   const tenantId = new Types.ObjectId();
   const fuenteId = new Types.ObjectId().toString();
@@ -3258,6 +3447,7 @@ describe('CotizacionesService previewRepetirCotizacion', () => {
       {} as any,
       {} as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
 
     jest.spyOn(service, 'findOne').mockImplementation(async (id: string) => {
@@ -3492,6 +3682,7 @@ describe('CotizacionesService notificaciones internas magic link (Story 6.13)', 
       {} as any,
       usersService as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 
@@ -3660,6 +3851,7 @@ describe('CotizacionesService notificaciones internas magic link (Story 6.13)', 
       {} as any,
       usersService as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(createService, 'findOne').mockResolvedValue({
       _id: new Types.ObjectId(),
@@ -3783,6 +3975,7 @@ describe('CotizacionesService notificaciones internas magic link (Story 6.13)', 
       {} as any,
       usersService as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
     jest.spyOn(repetirService, 'findOne').mockImplementation(async (id) => {
       if (String(id) === String(fuenteId)) {
@@ -3855,6 +4048,7 @@ describe('CotizacionesService notas internas', () => {
       {} as any,
       usersService as any,
       { findById: jest.fn().mockResolvedValue({ activo: true }) } as any,
+      stubRecordatoriosService() as any,
     );
   });
 

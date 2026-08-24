@@ -116,6 +116,13 @@ export class TenantConfig {
 
   @Prop({ type: Boolean, required: false, default: undefined })
   defaultUsarVigencia?: boolean | null;
+
+  /**
+   * Zona IANA del Reloj del tenant (AD-30 / Story 9.1).
+   * Ausente → backfill / fallback de servicio: America/Mexico_City.
+   */
+  @Prop()
+  zonaHoraria?: string;
 }
 
 export const TenantConfigSchema = SchemaFactory.createForClass(TenantConfig);

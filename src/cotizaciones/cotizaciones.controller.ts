@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Patch,
   Param,
@@ -53,6 +54,9 @@ import { RepetirCotizacionDto } from './dto/repetir-cotizacion.dto';
 import { CreateNotaInternaDto } from './dto/create-nota-interna.dto';
 import { UpdateNotaInternaDto } from './dto/update-nota-interna.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RecordatoriosService } from './recordatorios/recordatorios.service';
+import { UpsertRecordatorioDto } from './recordatorios/dto/upsert-recordatorio.dto';
+import { RecordatoriosDisparadosResponseDto } from './recordatorios/dto/recordatorio-disparado-item.dto';
 
 @ApiTags('cotizaciones')
 @Controller('cotizaciones')
@@ -60,6 +64,7 @@ export class CotizacionesController {
   constructor(
     private readonly cotizacionesService: CotizacionesService,
     private readonly tenantContext: TenantContextService,
+    private readonly recordatoriosService: RecordatoriosService,
   ) {}
 
   @Post()
@@ -327,6 +332,69 @@ export class CotizacionesController {
     };
   }
 
+  @Get('recordatorios/disparados')
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @RolesDecorator(...AMES_ROLES)
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Tenant-Id',
+    required: false,
+    description:
+      'Obligatorio para admin_sistema (400 si ausente; 403 si inválido/inactivo). Operativo y admin_tenant: no enviar — se ignora; tenant del JWT.',
+  })
+  @ApiOperation({
+    summary: 'Listar recordatorios disparados (Story 10.2)',
+    description:
+      'Bandeja de trabajo del tenant: folio, identidad (AD-37), fechaDisparo, recetaResumen. Misma proyección para Dashboard y listado (10.3).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de recordatorios disparados',
+    type: RecordatoriosDisparadosResponseDto,
+  })
+  listRecordatoriosDisparados(): Promise<RecordatoriosDisparadosResponseDto> {
+    return this.recordatoriosService.listDisparados();
+  }
+
+  @Post('recordatorios/:recordatorioId/cerrar')
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @RolesDecorator(...AMES_ROLES)
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Tenant-Id',
+    required: false,
+    description:
+      'Obligatorio para admin_sistema (400 si ausente; 403 si inválido/inactivo). Operativo y admin_tenant: no enviar — se ignora; tenant del JWT.',
+  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Cerrar recordatorio disparado (Story 10.2)',
+    description:
+      'Transición disparado → cerrado. El recordatorio desaparece del listado de disparados (FR8).',
+  })
+  @ApiParam({
+    name: 'recordatorioId',
+    description: 'ID del documento recordatorio_recotizacion',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Recordatorio cerrado',
+    schema: {
+      type: 'object',
+      properties: { estado: { type: 'string', example: 'cerrado' } },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'No está en estado disparado',
+  })
+  @ApiResponse({ status: 404, description: 'Recordatorio no encontrado' })
+  cerrarRecordatorio(@Param('recordatorioId') recordatorioId: string) {
+    return this.recordatoriosService.cerrar(recordatorioId);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
   @UseInterceptors(TenantContextInterceptor)
@@ -361,9 +429,9 @@ export class CotizacionesController {
       'Obligatorio para admin_sistema (400 si ausente; 403 si inválido/inactivo). Operativo y admin_tenant: no enviar — se ignora; tenant del JWT.',
   })
   @ApiOperation({
-    summary: 'Repetir cotización (Story 6.12)',
+    summary: 'Repetir cotización (Story 6.12 + 11.1 recordatorio)',
     description:
-      'Clona con precios originales (snapshot) o actualizados (catálogo). Folio nuevo, vigente, vigencia recalculada. Sin correo ni magic link. Si hay servicios inexistentes/inactivos (modo actualizados), responde 400 con warnings para omitir o sustituir. Con cancelarOriginal=true cancela la fuente tras crear (sin rollback si falla la cancelación).',
+      'Clona con precios originales (snapshot) o actualizados (catálogo). Folio nuevo, vigente, vigencia recalculada. Sin correo ni magic link. Si hay servicios inexistentes/inactivos (modo actualizados), responde 400 con warnings para omitir o sustituir. Con cancelarOriginal=true cancela la fuente tras crear (sin rollback si falla la cancelación). Story 11.1: siempre cancela recordatorio origen; rearmarRecordatorio + recetaRecordatorio opcional crean recordatorio programado en la COT nueva.',
   })
   @ApiParam({ name: 'id', description: 'ID de la cotización fuente' })
   @ApiResponse({
@@ -410,6 +478,93 @@ export class CotizacionesController {
   @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
   previewRepetir(@Param('id') id: string, @Body() dto: RepetirCotizacionDto) {
     return this.cotizacionesService.previewRepetirCotizacion(id, dto);
+  }
+
+  @Get(':id/recordatorio')
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @RolesDecorator(...AMES_ROLES)
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Tenant-Id',
+    required: false,
+    description:
+      'Obligatorio para admin_sistema (400 si ausente; 403 si inválido/inactivo). Operativo y admin_tenant: no enviar — se ignora; tenant del JWT.',
+  })
+  @ApiOperation({
+    summary: 'Obtener recordatorio de recotización (Story 9.2)',
+    description:
+      'Lectura simétrica a PUT/DELETE. 404 = Ausente (sin documento). Si cancelado sin disparo previo, FE trata como CTA programar.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la cotización' })
+  @ApiResponse({ status: 200, description: 'Recordatorio encontrado' })
+  @ApiResponse({
+    status: 404,
+    description: 'Cotización o recordatorio no encontrado',
+  })
+  getRecordatorio(@Param('id') id: string) {
+    return this.recordatoriosService.findByCotizacion(id);
+  }
+
+  @Put(':id/recordatorio')
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @RolesDecorator(...AMES_ROLES)
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Tenant-Id',
+    required: false,
+    description:
+      'Obligatorio para admin_sistema (400 si ausente; 403 si inválido/inactivo). Operativo y admin_tenant: no enviar — se ignora; tenant del JWT.',
+  })
+  @ApiOperation({
+    summary: 'Programar o editar recordatorio de recotización (Story 9.1)',
+    description:
+      'Upsert de Receta. Calcula fechaDisparoUtc con Reloj del tenant (luxon). Cliente no envía fechaDisparoUtc como verdad. Rechaza post-disparo (everDisparado) y fechas no futuras.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la cotización' })
+  @ApiResponse({ status: 200, description: 'Recordatorio programado' })
+  @ApiResponse({
+    status: 400,
+    description: 'Receta inválida o fecha no futura',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'COT ya tuvo disparo; no admite otra receta',
+  })
+  @ApiResponse({ status: 404, description: 'Cotización no encontrada' })
+  upsertRecordatorio(
+    @Param('id') id: string,
+    @Body() dto: UpsertRecordatorioDto,
+  ) {
+    return this.recordatoriosService.upsert(id, dto);
+  }
+
+  @Delete(':id/recordatorio')
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @UseInterceptors(TenantContextInterceptor)
+  @RolesDecorator(...AMES_ROLES)
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Tenant-Id',
+    required: false,
+    description:
+      'Obligatorio para admin_sistema (400 si ausente; 403 si inválido/inactivo). Operativo y admin_tenant: no enviar — se ignora; tenant del JWT.',
+  })
+  @ApiOperation({
+    summary: 'Cancelar recordatorio programado (Story 9.1)',
+    description:
+      'Transición programado → cancelado. Reprogramar solo si never disparó (everDisparado=false).',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la cotización' })
+  @ApiResponse({ status: 200, description: 'Recordatorio cancelado' })
+  @ApiResponse({ status: 400, description: 'No está en estado programado' })
+  @ApiResponse({
+    status: 404,
+    description: 'Cotización o recordatorio no encontrado',
+  })
+  cancelarRecordatorio(@Param('id') id: string) {
+    return this.recordatoriosService.cancelar(id);
   }
 
   @Patch(':id')

@@ -6,6 +6,7 @@ import { isEmail } from 'class-validator';
 import { createTransporter } from './emails.config';
 import { passwordResetTemplate } from './templates/password-reset.template';
 import { quotationDecisionNotificationTemplate } from './templates/quotation-decision-notification.template';
+import { reminderRecotizacionDisparoTemplate } from './templates/reminder-recotizacion-disparo.template';
 import { TenantConfigService } from '../tenants/tenant-config.service';
 import {
   decryptSecret,
@@ -359,6 +360,62 @@ export class EmailsService {
       await this.sendEmail(
         to,
         `Cotización ${subjectFolio} ${decisionLabel}`,
+        html,
+        undefined,
+        undefined,
+        from,
+        undefined,
+        tenantTransporter,
+      );
+    } finally {
+      this.closeTransporter(tenantTransporter);
+    }
+  }
+
+  /**
+   * Aviso interno de recordatorio disparado (Story 10.1 / AD-33).
+   * SMTP auth = credenciales del tenant. Sin emailsPara/emailsCc de la COT.
+   */
+  async sendReminderRecotizacionDisparo(params: {
+    tenantId: Types.ObjectId | string;
+    to: string[];
+    folio: string;
+    fromOverride?: string;
+  }): Promise<void> {
+    const to = (params.to || [])
+      .map((e) => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+      .filter((e) => e && isEmail(e));
+    if (to.length === 0) {
+      throw new Error(
+        'sendReminderRecotizacionDisparo requiere al menos un destinatario',
+      );
+    }
+
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL')?.trim();
+    if (!frontendUrl) {
+      this.logger.error(
+        'FRONTEND_URL is not configured; cannot send reminder recotización email',
+      );
+      throw new Error('FRONTEND_URL is not configured');
+    }
+
+    const dashboardUrl = `${frontendUrl.replace(/\/+$/, '')}/admin#recordatorios-disparados`;
+    const safeFolio = this.escapeHtml(params.folio || '');
+    const safeDashboardUrl = this.escapeHtml(dashboardUrl);
+    const html = reminderRecotizacionDisparoTemplate({
+      folio: safeFolio,
+      dashboardUrl: safeDashboardUrl,
+    });
+    const subjectFolio = this.sanitizeSubjectPart(params.folio || '');
+    const subject = `Recordatorio de recotización · ${subjectFolio}`;
+
+    const { transporter: tenantTransporter, emailUser } =
+      await this.createTenantTransporter(params.tenantId);
+    const from = this.resolveTenantFrom(params.fromOverride, emailUser);
+    try {
+      await this.sendEmail(
+        to,
+        subject,
         html,
         undefined,
         undefined,

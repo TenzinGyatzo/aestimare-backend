@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { EmailsService } from './emails.service';
 import { passwordResetTemplate } from './templates/password-reset.template';
 import { quotationDecisionNotificationTemplate } from './templates/quotation-decision-notification.template';
+import { reminderRecotizacionDisparoTemplate } from './templates/reminder-recotizacion-disparo.template';
 import { TenantConfigService } from '../tenants/tenant-config.service';
 import { TenantsService } from '../tenants/tenants.service';
 import {
@@ -539,6 +540,103 @@ describe('EmailsService.sendInternalDecisionNotification (Story 6.13 + 3.3)', ()
       }),
     ).rejects.toThrow(/destinatario/);
     expect(tenantConfig.getOutboundSmtpAuth).not.toHaveBeenCalled();
+  });
+});
+
+describe('EmailsService.sendReminderRecotizacionDisparo (Story 10.1)', () => {
+  afterEach(() => {
+    delete process.env.TENANT_SECRETS_KEY;
+    jest.restoreAllMocks();
+  });
+
+  it('asunto, enlace dashboard y copy único; pide auth del tenant', async () => {
+    const tenantConfig = makeTenantConfig(defaultAuth());
+    const service = new EmailsService(
+      makeConfig(),
+      tenantConfig,
+      makeTenantsService(),
+    );
+    const sendEmail = jest
+      .spyOn(service as any, 'sendEmail')
+      .mockResolvedValue(undefined);
+
+    await service.sendReminderRecotizacionDisparo({
+      tenantId: TENANT_ID,
+      to: ['a@ames.test'],
+      folio: 'COT-42',
+      fromOverride: 'remitente@tenant.test',
+    });
+
+    expect(tenantConfig.getOutboundSmtpAuth).toHaveBeenCalledWith(TENANT_ID);
+    expect(sendEmail).toHaveBeenCalledWith(
+      ['a@ames.test'],
+      'Recordatorio de recotización · COT-42',
+      expect.any(String),
+      undefined,
+      undefined,
+      'remitente@tenant.test',
+      undefined,
+      expect.anything(),
+    );
+    const html = sendEmail.mock.calls[0][2] as string;
+    expect(html).toContain('COT-42');
+    expect(html).toContain('Contacta');
+    expect(html).toContain('http://localhost:5173/admin#recordatorios-disparados');
+  });
+
+  it('tenant inactivo rechaza envío', async () => {
+    const service = makeService(
+      {},
+      defaultAuth(),
+      makeTenantsService({ activo: false }),
+    );
+    await expect(
+      service.sendReminderRecotizacionDisparo({
+        tenantId: TENANT_ID,
+        to: ['a@ames.test'],
+        folio: 'COT-1',
+      }),
+    ).rejects.toBeInstanceOf(TenantInactiveForOutboundError);
+  });
+
+  it('sin destinatarios lanza (antes de auth)', async () => {
+    const tenantConfig = makeTenantConfig(defaultAuth());
+    const service = new EmailsService(
+      makeConfig(),
+      tenantConfig,
+      makeTenantsService(),
+    );
+    await expect(
+      service.sendReminderRecotizacionDisparo({
+        tenantId: TENANT_ID,
+        to: [],
+        folio: 'COT-1',
+      }),
+    ).rejects.toThrow(/destinatario/);
+    expect(tenantConfig.getOutboundSmtpAuth).not.toHaveBeenCalled();
+  });
+
+  it('FRONTEND_URL ausente lanza', async () => {
+    const service = makeService({ FRONTEND_URL: '' });
+    await expect(
+      service.sendReminderRecotizacionDisparo({
+        tenantId: TENANT_ID,
+        to: ['a@ames.test'],
+        folio: 'COT-1',
+      }),
+    ).rejects.toThrow(/FRONTEND_URL/);
+  });
+});
+
+describe('reminderRecotizacionDisparoTemplate', () => {
+  it('incluye folio y enlace dashboard', () => {
+    const html = reminderRecotizacionDisparoTemplate({
+      folio: 'COT-99',
+      dashboardUrl: 'https://app.test/admin#recordatorios-disparados',
+    });
+    expect(html).toContain('COT-99');
+    expect(html).toContain('recordatorios-disparados');
+    expect(html).toContain('Contacta');
   });
 });
 
