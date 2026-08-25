@@ -22,7 +22,7 @@ describe('fecha-disparo.calc (Story 9.1)', () => {
   });
 
   describe('relativo_hoy', () => {
-    it('1_mes → start-of-day +1 mes en zona → UTC', () => {
+    it('1_mes → día civil +1 mes a las 14:00 UTC', () => {
       const r = calcularFechaDisparoUtc({
         receta: { familia: 'relativo_hoy', preset: '1_mes' },
         zonaHoraria: zone,
@@ -30,7 +30,7 @@ describe('fecha-disparo.calc (Story 9.1)', () => {
       });
       expect(r).toEqual({
         ok: true,
-        fechaDisparoUtc: new Date('2026-07-15T06:00:00.000Z'),
+        fechaDisparoUtc: new Date('2026-07-15T14:00:00.000Z'),
       });
     });
 
@@ -70,7 +70,7 @@ describe('fecha-disparo.calc (Story 9.1)', () => {
       });
       expect(r).toEqual({
         ok: true,
-        fechaDisparoUtc: new Date('2027-02-15T06:00:00.000Z'),
+        fechaDisparoUtc: new Date('2027-02-15T14:00:00.000Z'),
       });
     });
 
@@ -102,7 +102,7 @@ describe('fecha-disparo.calc (Story 9.1)', () => {
   });
 
   describe('fecha_exacta', () => {
-    it('día futuro start-of-day en zona', () => {
+    it('día futuro a las 14:00 UTC (08:00 UTC-6 / 07:00 UTC-7)', () => {
       const r = calcularFechaDisparoUtc({
         receta: { familia: 'fecha_exacta', fechaExacta: '2026-09-01' },
         zonaHoraria: zone,
@@ -110,7 +110,19 @@ describe('fecha-disparo.calc (Story 9.1)', () => {
       });
       expect(r).toEqual({
         ok: true,
-        fechaDisparoUtc: new Date('2026-09-01T06:00:00.000Z'),
+        fechaDisparoUtc: new Date('2026-09-01T14:00:00.000Z'),
+      });
+    });
+
+    it('mismo instante UTC en America/Tijuana (verano UTC-7)', () => {
+      const r = calcularFechaDisparoUtc({
+        receta: { familia: 'fecha_exacta', fechaExacta: '2026-09-01' },
+        zonaHoraria: 'America/Tijuana',
+        nowUtc,
+      });
+      expect(r).toEqual({
+        ok: true,
+        fechaDisparoUtc: new Date('2026-09-01T14:00:00.000Z'),
       });
     });
 
@@ -123,7 +135,7 @@ describe('fecha-disparo.calc (Story 9.1)', () => {
       expect(r).toMatchObject({ ok: false, code: 'not_future' });
     });
 
-    it('rechaza hoy (start-of-day ≤ now)', () => {
+    it('rechaza hoy si 14:00 UTC ya pasó', () => {
       const r = calcularFechaDisparoUtc({
         receta: { familia: 'fecha_exacta', fechaExacta: '2026-06-15' },
         zonaHoraria: zone,

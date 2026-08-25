@@ -3,6 +3,12 @@ import { DateTime, DurationLike } from 'luxon';
 /** Fallback IANA si tenant_configs.zonaHoraria falta (AD-30). */
 export const DEFAULT_TENANT_ZONE = 'America/Mexico_City';
 
+/**
+ * Hora UTC del disparo sobre el día civil del tenant.
+ * 14:00 UTC = 08:00 en UTC-6 (CDMX) = 07:00 en UTC-7 (Pacífico en verano).
+ */
+export const HORA_DISPARO_UTC = 14;
+
 export const FAMILIAS_RECETA = [
   'relativo_hoy',
   'relativo_aniversario',
@@ -73,9 +79,27 @@ export function resolveTenantZone(zonaHoraria?: string | null): string {
 }
 
 /**
+ * Día civil en zona del tenant → 14:00 UTC de esa misma fecha (HORA_DISPARO_UTC).
+ */
+export function atHoraDisparoUtc(civilDayInTenantZone: DateTime): DateTime {
+  return DateTime.fromObject(
+    {
+      year: civilDayInTenantZone.year,
+      month: civilDayInTenantZone.month,
+      day: civilDayInTenantZone.day,
+      hour: HORA_DISPARO_UTC,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
+    },
+    { zone: 'utc' },
+  );
+}
+
+/**
  * Calcula fechaDisparoUtc desde receta + Reloj del tenant.
  *
- * Convención (cron-stable): start-of-calendar-day en zona del tenant → UTC.
+ * Convención (cron-stable): día civil en zona del tenant, disparo a las 14:00 UTC.
  * El cliente NUNCA es fuente de verdad de esta Date (AD-28).
  */
 export function calcularFechaDisparoUtc(params: {
@@ -197,8 +221,17 @@ export function calcularFechaDisparoUtc(params: {
     };
   }
 
+  const disparoUtc = atHoraDisparoUtc(target);
+  if (!disparoUtc.isValid) {
+    return {
+      ok: false,
+      code: 'invalid_receta',
+      message: 'No se pudo calcular la fecha. Intenta de nuevo.',
+    };
+  }
+
   // Futuro estricto según Reloj del tenant (FR5 / NFR1).
-  if (target.toMillis() <= now.toMillis()) {
+  if (disparoUtc.toMillis() <= now.toMillis()) {
     return {
       ok: false,
       code: 'not_future',
@@ -209,6 +242,6 @@ export function calcularFechaDisparoUtc(params: {
 
   return {
     ok: true,
-    fechaDisparoUtc: target.toUTC().toJSDate(),
+    fechaDisparoUtc: disparoUtc.toJSDate(),
   };
 }

@@ -898,7 +898,7 @@ describe('RecordatoriosService disparados + cerrar (Story 10.2)', () => {
   });
 
   it('listDisparados: recetaResumen fecha_exacta con TZ del tenant (AD-30)', async () => {
-    const fechaDisparoUtc = new Date('2030-06-16T06:00:00.000Z');
+    const fechaDisparoUtc = new Date('2030-06-16T14:00:00.000Z');
     (tenantConfigService.findByTenantId as jest.Mock).mockResolvedValue({
       zonaHoraria: 'America/Los_Angeles',
     });
@@ -920,7 +920,7 @@ describe('RecordatoriosService disparados + cerrar (Story 10.2)', () => {
     const res = await service.listDisparados();
 
     expect(tenantConfigService.findByTenantId).toHaveBeenCalledWith(tenantId);
-    expect(res.items[0].recetaResumen).toMatch(/15.*2030|2030.*15/i);
+    expect(res.items[0].recetaResumen).toMatch(/16.*2030|2030.*16/i);
   });
 
   it('listDisparados: fallback contacto sin cliente CRM', async () => {

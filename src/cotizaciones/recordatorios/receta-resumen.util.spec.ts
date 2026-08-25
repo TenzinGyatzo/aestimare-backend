@@ -24,15 +24,15 @@ describe('receta-resumen.util', () => {
       const res = formatRecetaResumen(
         {
           familia: 'fecha_exacta',
-          fechaExacta: new Date('2030-06-15T06:00:00.000Z'),
+          fechaExacta: new Date('2030-06-15T14:00:00.000Z'),
         },
-        new Date('2030-06-15T06:00:00.000Z'),
+        new Date('2030-06-15T14:00:00.000Z'),
       );
       expect(res).toMatch(/2030|15|jun/i);
     });
 
-    it('fecha_exacta respeta zonaHoraria del tenant (AD-30)', () => {
-      const utc = new Date('2030-06-16T06:00:00.000Z');
+    it('fecha_exacta a las 14:00 UTC es el mismo día civil en México y Pacífico', () => {
+      const utc = new Date('2030-06-16T14:00:00.000Z');
       const resMexico = formatRecetaResumen(
         { familia: 'fecha_exacta', fechaExacta: utc },
         utc,
@@ -44,7 +44,7 @@ describe('receta-resumen.util', () => {
         'America/Los_Angeles',
       );
       expect(resMexico).toMatch(/16.*2030|2030.*16/i);
-      expect(resPacific).toMatch(/15.*2030|2030.*15/i);
+      expect(resPacific).toMatch(/16.*2030|2030.*16/i);
     });
   });
 
