@@ -20,5 +20,6 @@ El proyecto utiliza versionamiento semántico `MAYOR.MENOR.PARCHE`.
 - Recordatorios de recotización.
 - Plantillas de cotización.
 - Administración de usuarios, roles y tenants.
+- Registro de auditoría (audit trail) de acciones sensibles de autenticación, usuarios y administración.
 
 > Para publicar una nueva versión deben actualizarse conjuntamente este archivo, los `package.json` de Aestimare y sus archivos lock.
