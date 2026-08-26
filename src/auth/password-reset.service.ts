@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as crypto from 'crypto';
@@ -8,6 +8,13 @@ import {
 } from './schemas/password-reset-token.schema';
 import { EmailsService } from '../emails/emails.service';
 import { UsersService } from '../users/users.service';
+import { AuditService } from '../audit/audit.service';
+import {
+  AuditActionType,
+  AuditResourceType,
+  AuditResult,
+} from '../audit/audit-action-type';
+import type { AuditClientMeta } from '../audit/audit-client-meta';
 
 /** Discriminator interno de tokens reset (≠ rol JWT AMES). */
 const RESET_USER_TYPE = 'admin';
@@ -21,6 +28,7 @@ export class PasswordResetService {
     private passwordResetTokenModel: Model<PasswordResetTokenDocument>,
     private emailsService: EmailsService,
     private usersService: UsersService,
+    @Optional() private readonly auditService?: AuditService,
   ) {}
 
   private generateToken(): string {
@@ -36,7 +44,10 @@ export class PasswordResetService {
    * inexistente / inactivo / fallo SMTP/DB → sin excepción enumerable.
    * Los tokens previos solo se invalidan tras envío exitoso.
    */
-  async createResetTokenForAdmin(email: string): Promise<void> {
+  async createResetTokenForAdmin(
+    email: string,
+    meta?: AuditClientMeta,
+  ): Promise<void> {
     try {
       const user = await this.usersService.findByEmail(email);
 
@@ -80,6 +91,13 @@ export class PasswordResetService {
           })
           .exec();
         this.logger.log(`Password reset email sent to: ${email}`);
+        await this.auditPasswordReset(
+          'requested',
+          AuditResult.SUCCESS,
+          user,
+          email,
+          meta,
+        );
       } catch (error) {
         // No lanzar: un 400 aquí revelaría que el correo existe (FR-2).
         // Quitar el token nuevo para no dejar huérfanos ni quemar enlaces previos.
@@ -95,6 +113,14 @@ export class PasswordResetService {
         this.logger.error(
           `Failed to send password reset email to ${email}:`,
           error,
+        );
+        await this.auditPasswordReset(
+          'requested',
+          AuditResult.FAILURE,
+          user,
+          email,
+          meta,
+          { reason: 'email_send_failed' },
         );
       }
     } catch (error) {
@@ -126,6 +152,7 @@ export class PasswordResetService {
     email: string,
     token: string,
     newPassword: string,
+    meta?: AuditClientMeta,
   ): Promise<void> {
     const tokenHash = this.hashToken(token);
 
@@ -140,11 +167,27 @@ export class PasswordResetService {
       .exec();
 
     if (!resetToken) {
+      await this.auditPasswordReset(
+        'completed',
+        AuditResult.FAILURE,
+        null,
+        email,
+        meta,
+        { reason: 'invalid_token' },
+      );
       throw new BadRequestException('Token inválido, expirado o ya utilizado');
     }
 
     const user = await this.usersService.findByEmail(email);
     if (!user || !user.activo) {
+      await this.auditPasswordReset(
+        'completed',
+        AuditResult.FAILURE,
+        user,
+        email,
+        meta,
+        { reason: 'invalid_token' },
+      );
       throw new BadRequestException('Token inválido, expirado o ya utilizado');
     }
 
@@ -156,5 +199,41 @@ export class PasswordResetService {
     await resetToken.save();
 
     this.logger.log(`Password reset successfully for: ${email}`);
+    await this.auditPasswordReset(
+      'completed',
+      AuditResult.SUCCESS,
+      user,
+      email,
+      meta,
+    );
+  }
+
+  private async auditPasswordReset(
+    kind: 'requested' | 'completed',
+    result: AuditResult,
+    user: { _id?: unknown; tenantId?: unknown; email?: string; nombre?: string; rol?: string } | null,
+    email: string,
+    meta?: AuditClientMeta,
+    payload?: Record<string, unknown>,
+  ): Promise<void> {
+    await this.auditService?.record({
+      tenantId: user?.tenantId ? String(user.tenantId) : undefined,
+      actorId: user?._id ? String(user._id) : undefined,
+      actorSnapshot: {
+        email: user?.email || email.trim().toLowerCase(),
+        nombre: user?.nombre,
+        rol: user?.rol,
+      },
+      actionType:
+        kind === 'requested'
+          ? AuditActionType.AUTH_PASSWORD_RESET_REQUESTED
+          : AuditActionType.AUTH_PASSWORD_RESET_COMPLETED,
+      resourceType: AuditResourceType.AUTH,
+      resourceId: user?._id ? String(user._id) : undefined,
+      result,
+      payload,
+      ip: meta?.ip,
+      userAgent: meta?.userAgent,
+    });
   }
 }

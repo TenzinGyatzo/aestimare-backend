@@ -7,6 +7,8 @@ import {
   HttpCode,
   HttpStatus,
   ForbiddenException,
+  Req,
+  Optional,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,6 +29,13 @@ import { PasswordResetService } from './password-reset.service';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ValidateResetTokenDto } from './dto/validate-reset-token.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { AuditService } from '../audit/audit.service';
+import {
+  AuditActionType,
+  AuditResourceType,
+  AuditResult,
+} from '../audit/audit-action-type';
+import { clientMetaFromRequest } from '../audit/audit-client-meta';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -35,6 +44,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
     private readonly passwordResetService: PasswordResetService,
+    @Optional() private readonly auditService?: AuditService,
   ) {}
 
   @Post('register')
@@ -55,7 +65,10 @@ export class AuthController {
     status: 403,
     description: 'Ya existen usuarios; use POST /api/users',
   })
-  async register(@Body() registerDto: RegisterDto) {
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Req() req: { ip?: string; headers?: Record<string, unknown> },
+  ) {
     const userCount = await this.usersService.count();
 
     if (userCount === 0) {
@@ -64,6 +77,21 @@ export class AuthController {
         password: registerDto.password,
         nombre: registerDto.nombre,
         rol: Roles.ADMIN_SISTEMA,
+      });
+      const meta = clientMetaFromRequest(req);
+      await this.auditService?.record({
+        actorId: String((user as { _id?: unknown })._id ?? ''),
+        actorSnapshot: {
+          email: user.email,
+          nombre: user.nombre,
+          rol: user.rol,
+        },
+        actionType: AuditActionType.AUTH_BOOTSTRAP_REGISTER,
+        resourceType: AuditResourceType.USER,
+        resourceId: String((user as { _id?: unknown })._id ?? ''),
+        result: AuditResult.SUCCESS,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
       });
       return this.usersService.sanitize(user);
     }
@@ -104,8 +132,12 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
-  async login(@Body() loginDto: LoginDto, @CurrentUser() user: any) {
-    return this.authService.login(user);
+  async login(
+    @Body() loginDto: LoginDto,
+    @CurrentUser() user: any,
+    @Req() req: { ip?: string; headers?: Record<string, unknown> },
+  ) {
+    return this.authService.login(user, clientMetaFromRequest(req));
   }
 
   @Get('profile')
@@ -138,8 +170,14 @@ export class AuthController {
     status: 200,
     description: 'Si el email existe, se enviará un correo de recuperación',
   })
-  async requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
-    await this.passwordResetService.createResetTokenForAdmin(dto.email);
+  async requestPasswordReset(
+    @Body() dto: RequestPasswordResetDto,
+    @Req() req: { ip?: string; headers?: Record<string, unknown> },
+  ) {
+    await this.passwordResetService.createResetTokenForAdmin(
+      dto.email,
+      clientMetaFromRequest(req),
+    );
     return {
       message:
         'Si el email existe en nuestro sistema, recibirás un correo con instrucciones para restablecer tu contraseña',
@@ -176,11 +214,15 @@ export class AuthController {
     status: 400,
     description: 'Token inválido, expirado o ya utilizado',
   })
-  async resetPassword(@Body() dto: ResetPasswordDto) {
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Req() req: { ip?: string; headers?: Record<string, unknown> },
+  ) {
     await this.passwordResetService.resetPasswordForAdmin(
       dto.email,
       dto.token,
       dto.newPassword,
+      clientMetaFromRequest(req),
     );
     return { message: 'Contraseña restablecida exitosamente' };
   }

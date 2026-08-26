@@ -185,3 +185,66 @@ describe('PasswordResetService.resetPasswordForAdmin', () => {
     expect(usersService.update).not.toHaveBeenCalled();
   });
 });
+
+describe('PasswordResetService auditoría', () => {
+  const tokenModel = {
+    deleteMany: jest
+      .fn()
+      .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) }),
+    create: jest.fn().mockResolvedValue({}),
+    findOne: jest.fn(),
+  };
+  const emailsService = { sendPasswordResetEmail: jest.fn() };
+  const usersService = {
+    findByEmail: jest.fn(),
+    update: jest.fn().mockResolvedValue(undefined),
+  };
+  const auditService = { record: jest.fn().mockResolvedValue(undefined) };
+  const tenantId = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+
+  const service = new PasswordResetService(
+    tokenModel as any,
+    emailsService as any,
+    usersService as any,
+    auditService as any,
+  );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    tokenModel.create.mockResolvedValue({});
+    tokenModel.deleteMany.mockReturnValue({
+      exec: jest.fn().mockResolvedValue({}),
+    });
+  });
+
+  it('solicitud con usuario activo registra requested success sin token', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      _id: 'u1',
+      email: 'ok@ames.test',
+      nombre: 'Ok',
+      rol: 'admin_tenant',
+      tenantId,
+      activo: true,
+    });
+    emailsService.sendPasswordResetEmail.mockResolvedValue(undefined);
+
+    await service.createResetTokenForAdmin('ok@ames.test', { ip: '9.9.9.9' });
+
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: 'auth.password_reset.requested',
+        result: 'success',
+        tenantId,
+        ip: '9.9.9.9',
+      }),
+    );
+    const dumped = JSON.stringify(auditService.record.mock.calls[0][0]);
+    expect(dumped).not.toMatch(/tokenHash|newPassword|emailPass|"password"/i);
+  });
+
+  it('email inexistente no deja rastro enumerable', async () => {
+    usersService.findByEmail.mockResolvedValue(null);
+    await service.createResetTokenForAdmin('ghost@ames.test');
+    expect(auditService.record).not.toHaveBeenCalled();
+  });
+});

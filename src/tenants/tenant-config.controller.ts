@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   UseFilters,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -37,6 +38,17 @@ import { UpdateTenantBrandingDto } from './dto/update-tenant-branding.dto';
 import { UpdateTenantEmailDto } from './dto/update-tenant-email.dto';
 import { UpdateTenantVigenciaBancariosDto } from './dto/update-tenant-vigencia-bancarios.dto';
 import { MulterBadRequestFilter } from './multer-bad-request.filter';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AuditService } from '../audit/audit.service';
+import {
+  AuditActionType,
+  AuditResourceType,
+  AuditResult,
+} from '../audit/audit-action-type';
+import {
+  actorIdFromUser,
+  actorSnapshotFromUser,
+} from '../audit/audit-client-meta';
 
 /** Escritura config: admin_tenant | admin_sistema (FR42 / AD-16 / Story 2.4). */
 const CONFIG_WRITE_ROLES = [Roles.ADMIN_TENANT, Roles.ADMIN_SISTEMA] as const;
@@ -54,7 +66,10 @@ const CONFIG_WRITE_ROLES = [Roles.ADMIN_TENANT, Roles.ADMIN_SISTEMA] as const;
     'Obligatorio para admin_sistema. Operativo y admin_tenant: no enviar (tenant del JWT). Define qué configuración se lee/escribe (AD-2).',
 })
 export class TenantConfigController {
-  constructor(private readonly tenantConfigService: TenantConfigService) {}
+  constructor(
+    private readonly tenantConfigService: TenantConfigService,
+    @Optional() private readonly auditService?: AuditService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -92,8 +107,28 @@ export class TenantConfigController {
     status: 403,
     description: 'operativo u otro rol sin permiso / tenant inválido',
   })
-  async patchBranding(@Body() dto: UpdateTenantBrandingDto) {
+  async patchBranding(
+    @Body() dto: UpdateTenantBrandingDto,
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string },
+  ) {
     const doc = await this.tenantConfigService.updateBranding(dto);
+    await this.recordConfigWrite(
+      user,
+      doc,
+      AuditActionType.TENANT_CONFIG_BRANDING_UPDATED,
+      {
+        fields: (
+          [
+            'razonSocial',
+            'rfc',
+            'domicilio',
+            'telefono',
+            'emailContacto',
+            'sitioWeb',
+          ] as const
+        ).filter((k) => dto[k] !== undefined),
+      },
+    );
     return this.tenantConfigService.toResponseAsync(doc);
   }
 
@@ -112,8 +147,23 @@ export class TenantConfigController {
     status: 403,
     description: 'operativo u otro rol sin permiso / tenant inválido',
   })
-  async patchEmail(@Body() dto: UpdateTenantEmailDto) {
+  async patchEmail(
+    @Body() dto: UpdateTenantEmailDto,
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string },
+  ) {
     const doc = await this.tenantConfigService.updateEmailConfig(dto);
+    const fields = (
+      ['emailRemitente', 'correosNotificacion', 'emailUser'] as const
+    ).filter((k) => dto[k] !== undefined);
+    await this.recordConfigWrite(
+      user,
+      doc,
+      AuditActionType.TENANT_CONFIG_EMAIL_UPDATED,
+      {
+        fields,
+        credentialsUpdated: dto.emailPass != null && dto.emailPass !== '',
+      },
+    );
     return this.tenantConfigService.toResponseAsync(doc);
   }
 
@@ -135,8 +185,48 @@ export class TenantConfigController {
     status: 403,
     description: 'operativo u otro rol sin permiso / tenant inválido',
   })
-  async patchVigenciaBancarios(@Body() dto: UpdateTenantVigenciaBancariosDto) {
+  async patchVigenciaBancarios(
+    @Body() dto: UpdateTenantVigenciaBancariosDto,
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string },
+  ) {
     const doc = await this.tenantConfigService.updateVigenciaBancarios(dto);
+    const fields: string[] = [];
+    if (dto.vigenciaDefaultDias !== undefined) fields.push('vigenciaDefaultDias');
+    if (dto.defaultIncluirDatosBancarios !== undefined) {
+      fields.push('defaultIncluirDatosBancarios');
+    }
+    if (dto.defaultIncluirDescripciones !== undefined) {
+      fields.push('defaultIncluirDescripciones');
+    }
+    if (dto.defaultIncluirImagenesPdf !== undefined) {
+      fields.push('defaultIncluirImagenesPdf');
+    }
+    if (dto.defaultUsarVigencia !== undefined) fields.push('defaultUsarVigencia');
+    if (dto.bancarios !== undefined) {
+      if (dto.bancarios === null) {
+        fields.push('bancarios');
+      } else {
+        for (const key of [
+          'titular',
+          'banco',
+          'cuenta',
+          'clabe',
+          'domicilio',
+          'rfc',
+          'email',
+        ] as const) {
+          if (dto.bancarios[key] !== undefined) {
+            fields.push(`bancarios.${key}`);
+          }
+        }
+      }
+    }
+    await this.recordConfigWrite(
+      user,
+      doc,
+      AuditActionType.TENANT_CONFIG_VIGENCIA_BANCARIOS_UPDATED,
+      { fields },
+    );
     return this.tenantConfigService.toResponseAsync(doc);
   }
 
@@ -169,11 +259,19 @@ export class TenantConfigController {
       limits: { fileSize: 1_000_000 },
     }),
   )
-  async uploadLogo(@UploadedFile() file: Express.Multer.File) {
+  async uploadLogo(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string },
+  ) {
     if (!file) {
       throw new BadRequestException('Archivo de logo requerido');
     }
     const doc = await this.tenantConfigService.saveLogo(file);
+    await this.recordConfigWrite(
+      user,
+      doc,
+      AuditActionType.TENANT_CONFIG_LOGO_UPDATED,
+    );
     return this.tenantConfigService.toResponseAsync(doc);
   }
 
@@ -188,8 +286,15 @@ export class TenantConfigController {
     status: 403,
     description: 'operativo u otro rol sin permiso / tenant inválido',
   })
-  async deleteLogo() {
+  async deleteLogo(
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string },
+  ) {
     const doc = await this.tenantConfigService.clearLogo();
+    await this.recordConfigWrite(
+      user,
+      doc,
+      AuditActionType.TENANT_CONFIG_LOGO_DELETED,
+    );
     return this.tenantConfigService.toResponseAsync(doc);
   }
 
@@ -223,11 +328,19 @@ export class TenantConfigController {
       limits: { fileSize: 1_000_000 },
     }),
   )
-  async uploadBankLogo(@UploadedFile() file: Express.Multer.File) {
+  async uploadBankLogo(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string },
+  ) {
     if (!file) {
       throw new BadRequestException('Archivo de logo requerido');
     }
     const doc = await this.tenantConfigService.saveBankLogo(file);
+    await this.recordConfigWrite(
+      user,
+      doc,
+      AuditActionType.TENANT_CONFIG_BANK_LOGO_UPDATED,
+    );
     return this.tenantConfigService.toResponseAsync(doc);
   }
 
@@ -242,8 +355,36 @@ export class TenantConfigController {
     status: 403,
     description: 'operativo u otro rol sin permiso / tenant inválido',
   })
-  async deleteBankLogo() {
+  async deleteBankLogo(
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string },
+  ) {
     const doc = await this.tenantConfigService.clearBankLogo();
+    await this.recordConfigWrite(
+      user,
+      doc,
+      AuditActionType.TENANT_CONFIG_BANK_LOGO_DELETED,
+    );
     return this.tenantConfigService.toResponseAsync(doc);
+  }
+
+  private async recordConfigWrite(
+    user: { _id?: string; email?: string; rol?: string },
+    doc: { _id?: unknown; tenantId?: unknown },
+    actionType: AuditActionType,
+    extraPayload?: Record<string, unknown>,
+  ): Promise<void> {
+    await this.auditService?.record({
+      tenantId: doc.tenantId ? String(doc.tenantId) : undefined,
+      actorId: actorIdFromUser(user),
+      actorSnapshot: actorSnapshotFromUser(user),
+      actionType,
+      resourceType: AuditResourceType.TENANT_CONFIG,
+      resourceId: doc._id ? String(doc._id) : undefined,
+      result: AuditResult.SUCCESS,
+      payload: {
+        ...extraPayload,
+        viaSupport: user.rol === Roles.ADMIN_SISTEMA,
+      },
+    });
   }
 }

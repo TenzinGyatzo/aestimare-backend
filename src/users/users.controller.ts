@@ -13,6 +13,7 @@ import {
   UseGuards,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -36,6 +37,18 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { X_TENANT_ID_HEADER } from '../tenants/tenant-context.guard';
 import { TenantsService } from '../tenants/tenants.service';
 import { isStrictObjectId } from '../common/strict-object-id';
+import { AuditService } from '../audit/audit.service';
+import {
+  AuditActionType,
+  AuditResourceType,
+  AuditResult,
+} from '../audit/audit-action-type';
+import {
+  actorIdFromUser,
+  actorSnapshotFromUser,
+} from '../audit/audit-client-meta';
+
+@ApiTags('users')
 
 @ApiTags('users')
 @Controller('users')
@@ -52,6 +65,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly tenantsService: TenantsService,
+    @Optional() private readonly auditService?: AuditService,
   ) {}
 
   private async actorFrom(
@@ -130,10 +144,25 @@ export class UsersController {
     @CurrentUser() user: { rol?: string; tenantId?: string },
     @Req() req: { headers?: Record<string, unknown> },
   ) {
-    const created = await this.usersService.create(
-      createUserDto,
-      await this.actorFrom(user, req),
-    );
+    const actor = await this.actorFrom(user, req);
+    const created = await this.usersService.create(createUserDto, actor);
+    await this.auditService?.record({
+      tenantId: created.tenantId ? String(created.tenantId) : undefined,
+      actorId: actorIdFromUser(user as { _id?: string }),
+      actorSnapshot: actorSnapshotFromUser({
+        email: (user as { email?: string }).email,
+        rol: user.rol,
+      }),
+      actionType: AuditActionType.USER_CREATED,
+      resourceType: AuditResourceType.USER,
+      resourceId: String(created._id),
+      result: AuditResult.SUCCESS,
+      payload: {
+        rol: created.rol,
+        email: created.email,
+        viaSupport: actor.rol === Roles.ADMIN_SISTEMA && !!actor.supportTenantId,
+      },
+    });
     return this.usersService.sanitize(created);
   }
 
@@ -184,14 +213,57 @@ export class UsersController {
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
-    @CurrentUser() user: { rol?: string; tenantId?: string },
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string; tenantId?: string },
     @Req() req: { headers?: Record<string, unknown> },
   ) {
-    const updated = await this.usersService.update(
-      id,
-      updateUserDto,
-      await this.actorFrom(user, req),
-    );
+    const actor = await this.actorFrom(user, req);
+    const before = await this.usersService.findManagedById(id, actor);
+    const updated = await this.usersService.update(id, updateUserDto, actor);
+    const viaSupport =
+      actor.rol === Roles.ADMIN_SISTEMA && !!actor.supportTenantId;
+    const base = {
+      tenantId: updated.tenantId
+        ? String(updated.tenantId)
+        : before.tenantId
+          ? String(before.tenantId)
+          : undefined,
+      actorId: actorIdFromUser(user),
+      actorSnapshot: actorSnapshotFromUser(user),
+      resourceType: AuditResourceType.USER as const,
+      resourceId: String(updated._id),
+      result: AuditResult.SUCCESS,
+    };
+
+    if (updateUserDto.rol !== undefined && updateUserDto.rol !== before.rol) {
+      await this.auditService?.record({
+        ...base,
+        actionType: AuditActionType.USER_ROLE_CHANGED,
+        payload: {
+          from: before.rol,
+          to: updated.rol,
+          viaSupport,
+        },
+      });
+    }
+    if (
+      updateUserDto.activo !== undefined &&
+      updateUserDto.activo !== before.activo
+    ) {
+      await this.auditService?.record({
+        ...base,
+        actionType: updateUserDto.activo
+          ? AuditActionType.USER_ACTIVATED
+          : AuditActionType.USER_SUSPENDED,
+        payload: { viaSupport },
+      });
+    }
+    if (updateUserDto.password) {
+      await this.auditService?.record({
+        ...base,
+        actionType: AuditActionType.USER_PASSWORD_CHANGED,
+        payload: { viaSupport },
+      });
+    }
     return this.usersService.sanitize(updated);
   }
 
@@ -205,13 +277,23 @@ export class UsersController {
   @ApiResponse({ status: 200, type: UserResponseDto })
   async remove(
     @Param('id') id: string,
-    @CurrentUser() user: { rol?: string; tenantId?: string },
+    @CurrentUser() user: { _id?: string; email?: string; rol?: string; tenantId?: string },
     @Req() req: { headers?: Record<string, unknown> },
   ) {
-    const removed = await this.usersService.softDelete(
-      id,
-      await this.actorFrom(user, req),
-    );
+    const actor = await this.actorFrom(user, req);
+    const removed = await this.usersService.softDelete(id, actor);
+    await this.auditService?.record({
+      tenantId: removed.tenantId ? String(removed.tenantId) : undefined,
+      actorId: actorIdFromUser(user),
+      actorSnapshot: actorSnapshotFromUser(user),
+      actionType: AuditActionType.USER_DELETED,
+      resourceType: AuditResourceType.USER,
+      resourceId: String(removed._id),
+      result: AuditResult.SUCCESS,
+      payload: {
+        viaSupport: actor.rol === Roles.ADMIN_SISTEMA && !!actor.supportTenantId,
+      },
+    });
     return this.usersService.sanitize(removed);
   }
 }
