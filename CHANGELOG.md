@@ -21,5 +21,6 @@ El proyecto utiliza versionamiento semántico `MAYOR.MENOR.PARCHE`.
 - Plantillas de cotización.
 - Administración de usuarios, roles y tenants.
 - Registro de auditoría (audit trail) de acciones sensibles de autenticación, usuarios y administración.
+- Acuerdo de confidencialidad in-app: los usuarios autenticados deben aceptar la versión vigente antes de usar la plataforma.
 
 > Para publicar una nueva versión deben actualizarse conjuntamente este archivo, los `package.json` de Aestimare y sus archivos lock.
