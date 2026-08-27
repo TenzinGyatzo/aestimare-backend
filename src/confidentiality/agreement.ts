@@ -27,12 +27,12 @@ export const CURRENT_AGREEMENT_SECTIONS: AgreementSection[] = [
   },
   {
     title: '4. Trazabilidad y Consecuencias:',
-    body: 'Acepto que mis interacciones dentro de la plataforma son monitoreadas y registradas mediante un mecanismo de auditoría. Comprendo que la violación a este acuerdo facultará al titular o administrador del sistema  a revocar mi acceso de forma inmediata y definitiva, independientemente de las sanciones civiles, penales o administrativas a las que haya lugar por la vulneración de la confidencialidad de la información de la organización usuaria y de sus clientes.',
+    body: 'Acepto que determinadas actividades relevantes realizadas dentro de la plataforma son registradas mediante mecanismos de auditoría, conforme a los eventos definidos para el producto. Comprendo que la violación a este acuerdo facultará al titular o administrador del sistema  a revocar mi acceso de forma inmediata y definitiva, independientemente de las sanciones civiles, penales o administrativas a las que haya lugar por la vulneración de la confidencialidad de la información de la organización usuaria y de sus clientes.',
   },
 ];
 
 export const CURRENT_AGREEMENT_DECLARATION =
-  'Al hacer clic en “Acepto”, confirmo que he leído y comprendido los términos de este acuerdo, otorgando mi consentimiento electrónico con la misma validez legal que una firma autógrafa.';
+  'Al hacer clic en "Acepto", confirmo que he leído y comprendido los términos de este acuerdo y manifiesto expresamente mi aceptación por medios electrónicos.';
 
 export const CURRENT_AGREEMENT_FOOTER =
   'He leído y comprendo el Acuerdo de Confidencialidad y Uso de la Información';
