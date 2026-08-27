@@ -21,6 +21,7 @@ export enum AuditActionType {
   TENANT_CONFIG_LOGO_DELETED = 'tenant_config.logo.deleted',
   TENANT_CONFIG_BANK_LOGO_UPDATED = 'tenant_config.bank_logo.updated',
   TENANT_CONFIG_BANK_LOGO_DELETED = 'tenant_config.bank_logo.deleted',
+  CONFIDENTIALITY_ACCEPTED = 'confidentiality.accepted',
 }
 
 export enum AuditResourceType {
@@ -28,6 +29,7 @@ export enum AuditResourceType {
   USER = 'user',
   TENANT = 'tenant',
   TENANT_CONFIG = 'tenant_config',
+  CONFIDENTIALITY = 'confidentiality',
 }
 
 export enum AuditResult {

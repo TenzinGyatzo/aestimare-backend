@@ -36,9 +36,11 @@ import {
   AuditResult,
 } from '../audit/audit-action-type';
 import { clientMetaFromRequest } from '../audit/audit-client-meta';
+import { SkipConfidentiality } from '../confidentiality/skip-confidentiality.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
+@SkipConfidentiality()
 export class AuthController {
   constructor(
     private readonly authService: AuthService,

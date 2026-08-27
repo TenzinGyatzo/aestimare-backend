@@ -16,6 +16,7 @@ import { PlantillasModule } from './plantillas/plantillas.module';
 import { CountersModule } from './counters/counters.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AuditModule } from './audit/audit.module';
+import { ConfidentialityModule } from './confidentiality/confidentiality.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AuditModule } from './audit/audit.module';
     DatabaseModule,
     TenantsModule,
     AuditModule,
+    ConfidentialityModule,
     PlantillasModule,
     CountersModule,
     UsersModule,
