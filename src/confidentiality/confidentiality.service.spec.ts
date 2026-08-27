@@ -47,6 +47,9 @@ describe('ConfidentialityService', () => {
       currentVersion: CURRENT_AGREEMENT_VERSION,
       agreementText: CURRENT_AGREEMENT_TEXT,
       footerConsent: CURRENT_AGREEMENT_FOOTER,
+      intro: expect.any(String),
+      sections: expect.any(Array),
+      declaration: expect.any(String),
     });
     expect(findOne).toHaveBeenCalledWith({
       userId: expect.any(Types.ObjectId),

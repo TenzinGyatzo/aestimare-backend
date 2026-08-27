@@ -18,9 +18,13 @@ import {
 } from '../audit/audit-client-meta';
 import { isStrictObjectId } from '../common/strict-object-id';
 import {
+  CURRENT_AGREEMENT_DECLARATION,
   CURRENT_AGREEMENT_FOOTER,
+  CURRENT_AGREEMENT_INTRO,
+  CURRENT_AGREEMENT_SECTIONS,
   CURRENT_AGREEMENT_TEXT,
   CURRENT_AGREEMENT_VERSION,
+  type AgreementSection,
 } from './agreement';
 import {
   ConfidentialityAcceptance,
@@ -35,6 +39,9 @@ export type ConfidentialityStatus = {
   currentVersion: string;
   agreementText?: string;
   footerConsent?: string;
+  intro?: string;
+  sections?: AgreementSection[];
+  declaration?: string;
 };
 
 export type ConfidentialityActor = AuditActor & {
@@ -116,6 +123,9 @@ export class ConfidentialityService {
       currentVersion: CURRENT_AGREEMENT_VERSION,
       agreementText: CURRENT_AGREEMENT_TEXT,
       footerConsent: CURRENT_AGREEMENT_FOOTER,
+      intro: CURRENT_AGREEMENT_INTRO,
+      sections: CURRENT_AGREEMENT_SECTIONS,
+      declaration: CURRENT_AGREEMENT_DECLARATION,
     };
   }
 
