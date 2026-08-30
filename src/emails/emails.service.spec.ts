@@ -94,8 +94,8 @@ describe('EmailsService.sendPasswordResetEmail', () => {
       expect.stringContaining(
         'http://localhost:5173/admin/reset-password?token=tok123&amp;email=u%40ames.test',
       ),
-      'from@ames.test',
     );
+    expect(sendEmail.mock.calls[0]).toHaveLength(3);
     const [, subject, html] = sendEmail.mock.calls[0];
     expect(subject).not.toContain('AMES');
     expect(subject).not.toContain('Cotizador AMES');
@@ -126,6 +126,34 @@ describe('EmailsService.sendPasswordResetEmail', () => {
     await expect(
       service.sendPasswordResetEmail('u@ames.test', 'User', 'tok'),
     ).rejects.toThrow(/FRONTEND_URL/);
+  });
+
+  it('sendMail: to usuario, from EMAIL_FROM, sin bcc, con enlace de reset', async () => {
+    const sendMail = jest.fn().mockResolvedValue({ messageId: 'mid-reset' });
+    jest.spyOn(emailsConfig, 'createTransporter').mockReturnValue({
+      sendMail,
+      close: jest.fn(),
+    } as any);
+    const service = new EmailsService(
+      makeConfig(),
+      makeTenantConfig(null),
+      makeTenantsService(),
+    );
+
+    try {
+      await service.sendPasswordResetEmail('u@ames.test', 'User', 'tok123');
+
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      const mailOptions = sendMail.mock.calls[0][0];
+      expect(mailOptions.to).toBe('u@ames.test');
+      expect(mailOptions.from).toBe('from@ames.test');
+      expect(mailOptions).not.toHaveProperty('bcc');
+      expect(mailOptions.html).toContain(
+        'http://localhost:5173/admin/reset-password?token=tok123&amp;email=u%40ames.test',
+      );
+    } finally {
+      jest.restoreAllMocks();
+    }
   });
 });
 

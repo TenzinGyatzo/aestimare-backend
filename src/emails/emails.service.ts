@@ -501,11 +501,6 @@ export class EmailsService {
       this.escapeHtml(resetUrl),
     );
 
-    await this.sendEmail(
-      email,
-      'Restablecer Contraseña - Aestimare',
-      html,
-      this.emailFrom,
-    );
+    await this.sendEmail(email, 'Restablecer Contraseña - Aestimare', html);
   }
 }
