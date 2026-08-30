@@ -30,6 +30,7 @@ describe('AuthService.login', () => {
         rol: Roles.OPERATIVO,
         tipoUsuario: Roles.OPERATIVO,
         tenantId: 't1',
+        credentialsVersion: 0,
       }),
     );
     expect(result.user.rol).toBe(Roles.OPERATIVO);
@@ -67,10 +68,27 @@ describe('AuthService.login', () => {
         rol: Roles.ADMIN_TENANT,
         tipoUsuario: Roles.ADMIN_TENANT,
         tenantId: 't2',
+        credentialsVersion: 0,
       }),
     );
     expect(result.user.rol).toBe(Roles.ADMIN_TENANT);
     expect(result.user.tipoUsuario).toBe(Roles.ADMIN_TENANT);
+  });
+
+  it('incluye credentialsVersion del usuario (o 0 si ausente)', async () => {
+    await service.login({
+      _id: 'u4',
+      email: 'op2@ames.test',
+      nombre: 'Op2',
+      rol: Roles.OPERATIVO,
+      tenantId: 't1',
+      activo: true,
+      credentialsVersion: 3,
+    });
+
+    expect(jwtService.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ credentialsVersion: 3 }),
+    );
   });
 });
 

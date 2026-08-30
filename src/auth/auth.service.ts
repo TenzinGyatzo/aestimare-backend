@@ -82,6 +82,7 @@ export class AuthService {
       email: user.email,
       rol: user.rol,
       tipoUsuario: user.rol,
+      credentialsVersion: user.credentialsVersion ?? 0,
     };
     if (user.tenantId) {
       payload.tenantId = user.tenantId;

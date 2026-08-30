@@ -24,6 +24,10 @@ export class User {
 
   @Prop({ default: true })
   activo: boolean;
+
+  /** Generación de credenciales. Incrementa solo en suspensión (true→false). */
+  @Prop({ type: Number, default: 0 })
+  credentialsVersion: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -490,6 +490,225 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
       expect(save).toHaveBeenCalled();
     });
 
+    it('findAuthPrincipal id inválido → null (nunca 404)', async () => {
+      await expect(service.findAuthPrincipal('bad-id')).resolves.toBeNull();
+      expect(userModel.findById).not.toHaveBeenCalled();
+    });
+
+    it('findAuthPrincipal inexistente → null', async () => {
+      const oid = new Types.ObjectId().toString();
+      userModel.findById.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue(null),
+          }),
+        }),
+      });
+      await expect(service.findAuthPrincipal(oid)).resolves.toBeNull();
+    });
+
+    function mockUpdateCurrent(current: Record<string, unknown>) {
+      userModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(current),
+      });
+      userModel.findByIdAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ ...current }),
+      });
+    }
+
+    it('update activo false incrementa credentialsVersion (0 → 1)', async () => {
+      const userId = new Types.ObjectId();
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      mockUpdateCurrent({
+        _id: userId,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: true,
+        credentialsVersion: 0,
+      });
+
+      await service.update(userId.toString(), { activo: false });
+
+      expect(userModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        userId.toString(),
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            activo: false,
+            credentialsVersion: 1,
+          }),
+        }),
+        { new: true },
+      );
+    });
+
+    it('update activo false incrementa de nuevo (1 → 2)', async () => {
+      const userId = new Types.ObjectId();
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      mockUpdateCurrent({
+        _id: userId,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: true,
+        credentialsVersion: 1,
+      });
+
+      await service.update(userId.toString(), { activo: false });
+
+      expect(userModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        userId.toString(),
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            activo: false,
+            credentialsVersion: 2,
+          }),
+        }),
+        { new: true },
+      );
+    });
+
+    it('reactivar con versión 0/ausente establece 1', async () => {
+      const userId = new Types.ObjectId();
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      mockUpdateCurrent({
+        _id: userId,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: false,
+      });
+
+      await service.update(userId.toString(), { activo: true });
+
+      expect(userModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        userId.toString(),
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            activo: true,
+            credentialsVersion: 1,
+          }),
+        }),
+        { new: true },
+      );
+    });
+
+    it('reactivar con versión >= 1 no modifica credentialsVersion', async () => {
+      const userId = new Types.ObjectId();
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      mockUpdateCurrent({
+        _id: userId,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: false,
+        credentialsVersion: 2,
+      });
+
+      await service.update(userId.toString(), { activo: true });
+
+      const updateArg = userModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(updateArg.$set.activo).toBe(true);
+      expect(updateArg.$set.credentialsVersion).toBeUndefined();
+    });
+
+    it('update nombre/email/password no incrementa credentialsVersion', async () => {
+      const userId = new Types.ObjectId();
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      mockUpdateCurrent({
+        _id: userId,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: true,
+        credentialsVersion: 4,
+        email: 'old@ames.mx',
+      });
+      userModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      await service.update(userId.toString(), {
+        nombre: 'Nuevo Nombre',
+        email: 'nuevo@ames.mx',
+        password: 'secret99',
+      });
+
+      const updateArg = userModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(updateArg.$set.nombre).toBe('Nuevo Nombre');
+      expect(updateArg.$set.email).toBe('nuevo@ames.mx');
+      expect(updateArg.$set.passwordHash).toBeDefined();
+      expect(updateArg.$set.credentialsVersion).toBeUndefined();
+    });
+
+    it('update rol/tenant no incrementa credentialsVersion', async () => {
+      const userId = new Types.ObjectId();
+      const otherTenant = new Types.ObjectId();
+      tenantsService.findById.mockResolvedValue({
+        _id: otherTenant,
+        activo: true,
+      });
+      mockUpdateCurrent({
+        _id: userId,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: true,
+        credentialsVersion: 1,
+      });
+
+      await service.update(userId.toString(), {
+        rol: Roles.ADMIN_TENANT,
+        tenantId: otherTenant.toString(),
+      });
+
+      const updateArg = userModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(updateArg.$set.rol).toBe(Roles.ADMIN_TENANT);
+      expect(updateArg.$set.credentialsVersion).toBeUndefined();
+    });
+
+    it('softDelete incrementa credentialsVersion igual que PATCH activo:false', async () => {
+      const oid = 'dddddddddddddddddddddddd';
+      const doc = {
+        _id: oid,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: true,
+        credentialsVersion: 0,
+        save: jest.fn().mockImplementation(function (this: {
+          activo: boolean;
+          credentialsVersion: number;
+        }) {
+          return Promise.resolve(this);
+        }),
+      };
+      userModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(doc),
+      });
+
+      await service.softDelete(oid);
+
+      expect(doc.activo).toBe(false);
+      expect(doc.credentialsVersion).toBe(1);
+      expect(doc.save).toHaveBeenCalled();
+    });
+
+    it('softDelete de usuario ya inactivo no incrementa de nuevo', async () => {
+      const oid = 'eeeeeeeeeeeeeeeeeeeeeeee';
+      const doc = {
+        _id: oid,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: false,
+        credentialsVersion: 3,
+        save: jest.fn().mockImplementation(function (this: unknown) {
+          return Promise.resolve(this);
+        }),
+      };
+      userModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(doc),
+      });
+
+      await service.softDelete(oid);
+
+      expect(doc.activo).toBe(false);
+      expect(doc.credentialsVersion).toBe(3);
+    });
+
     it('update actor admin_tenant cross-tenant → NotFound', async () => {
       const userId = new Types.ObjectId();
       userModel.findById.mockReturnValue({

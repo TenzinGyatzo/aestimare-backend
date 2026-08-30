@@ -23,6 +23,16 @@ import {
   isStrictObjectId,
 } from '../common/strict-object-id';
 
+/** Principal mínimo para revalidar JWT (sin passwordHash). */
+export type AuthPrincipal = {
+  _id: Types.ObjectId;
+  email: string;
+  rol: string;
+  tenantId?: Types.ObjectId;
+  activo: boolean;
+  credentialsVersion?: number;
+};
+
 /** Actor de gestión de usuarios (Story 2.3). Ausente = callers internos de confianza. */
 export type UsersActor = {
   rol: string;
@@ -129,6 +139,26 @@ export class UsersService implements OnModuleInit {
         'No se puede desactivar ni degradar el último administrador de la administración activo',
       );
     }
+  }
+
+  /**
+   * Frontera de credenciales por suspensión.
+   * true→false: incrementa. false→true con versión 0/ausente: pasa a 1.
+   * false→true con versión ≥1: no toca. undefined = sin cambio.
+   */
+  private nextCredentialsVersionOnActivoChange(
+    current: { activo?: boolean; credentialsVersion?: number },
+    nextActivo: boolean,
+  ): number | undefined {
+    const wasActive = current.activo !== false;
+    const currentVersion = current.credentialsVersion ?? 0;
+    if (wasActive && nextActivo === false) {
+      return currentVersion + 1;
+    }
+    if (!wasActive && nextActivo === true && currentVersion === 0) {
+      return 1;
+    }
+    return undefined;
   }
 
   /** Valida AD-11: operativo|admin_tenant ↔ 1 tenant activo; admin_sistema sin tenant fijo. */
@@ -391,6 +421,20 @@ export class UsersService implements OnModuleInit {
     return user;
   }
 
+  /**
+   * Lookup para JwtStrategy. Id inválido o ausente → null (nunca 404).
+   */
+  async findAuthPrincipal(id: string): Promise<AuthPrincipal | null> {
+    if (!isStrictObjectId(id)) {
+      return null;
+    }
+    return this.userModel
+      .findById(id)
+      .select('_id email rol tenantId activo credentialsVersion')
+      .lean<AuthPrincipal>()
+      .exec();
+  }
+
   /** findById + scoping de gestión (Story 2.3). */
   async findManagedById(id: string, actor: UsersActor): Promise<UserDocument> {
     const user = await this.findById(id);
@@ -497,6 +541,13 @@ export class UsersService implements OnModuleInit {
     }
     if (updateUserDto.activo !== undefined) {
       setData.activo = updateUserDto.activo;
+      const nextVersion = this.nextCredentialsVersionOnActivoChange(
+        current,
+        updateUserDto.activo,
+      );
+      if (nextVersion !== undefined) {
+        setData.credentialsVersion = nextVersion;
+      }
     }
 
     if (updateUserDto.password) {
@@ -565,6 +616,9 @@ export class UsersService implements OnModuleInit {
     await this.assertNotRemovingLastActiveAdminTenant(user, {
       nextActivo: false,
     });
+    if (user.activo !== false) {
+      user.credentialsVersion = (user.credentialsVersion ?? 0) + 1;
+    }
     user.activo = false;
     return await user.save();
   }
