@@ -1,4 +1,9 @@
-import { Injectable, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Optional,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { TenantsService } from '../tenants/tenants.service';
@@ -116,6 +121,36 @@ export class AuthService {
         activo: user.activo,
       },
     };
+  }
+
+  /**
+   * Reautenticación del usuario del JWT. No emite ni renueva token.
+   * Password incorrecta → 400 (el interceptor FE no debe hacer logout).
+   * Usuario/tenant inválido → 401 (flujo de sesión expirada).
+   */
+  async verifyCurrentPassword(
+    userId: string,
+    passwordPlain: string,
+  ): Promise<void> {
+    const user = await this.usersService.findByIdWithPassword(userId);
+    if (!user || user.activo !== true) {
+      throw new UnauthorizedException();
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      passwordPlain,
+      user.passwordHash,
+    );
+    if (!isPasswordValid) {
+      throw new BadRequestException('Credenciales inválidas');
+    }
+
+    if (user.rol !== Roles.ADMIN_SISTEMA && user.tenantId) {
+      const tenant = await this.tenantsService.findById(String(user.tenantId));
+      if (!tenant || tenant.activo === false) {
+        throw new UnauthorizedException();
+      }
+    }
   }
 
   private async auditLoginFailure(

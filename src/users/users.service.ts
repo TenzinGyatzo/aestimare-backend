@@ -412,6 +412,14 @@ export class UsersService implements OnModuleInit {
       .exec();
   }
 
+  /** Lookup para verify-password. Id inválido o ausente → null (nunca 404). */
+  async findByIdWithPassword(id: string): Promise<UserDocument | null> {
+    if (!isStrictObjectId(id)) {
+      return null;
+    }
+    return this.userModel.findById(id).select('+passwordHash').exec();
+  }
+
   async findById(id: string): Promise<UserDocument> {
     assertStrictObjectIdOrNotFound(id, 'Usuario');
     const user = await this.userModel.findById(id).exec();

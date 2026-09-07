@@ -29,6 +29,7 @@ import { PasswordResetService } from './password-reset.service';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ValidateResetTokenDto } from './dto/validate-reset-token.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyPasswordDto } from './dto/verify-password.dto';
 import { AuditService } from '../audit/audit.service';
 import {
   AuditActionType,
@@ -159,6 +160,33 @@ export class AuthController {
     const fullUser = await this.usersService.findById(user._id);
     const { passwordHash, ...result } = fullUser.toObject();
     return result;
+  }
+
+  @Post('verify-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verificar la contraseña del usuario autenticado',
+    description:
+      'Confirma que la contraseña corresponde al usuario del JWT. No emite un token nuevo.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Contraseña válida',
+    schema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+  })
+  @ApiResponse({ status: 400, description: 'Credenciales inválidas' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async verifyPassword(
+    @CurrentUser() user: { _id?: unknown },
+    @Body() dto: VerifyPasswordDto,
+  ) {
+    await this.authService.verifyCurrentPassword(
+      String(user._id ?? ''),
+      dto.password,
+    );
+    return { ok: true };
   }
 
   @Post('password-reset/request')

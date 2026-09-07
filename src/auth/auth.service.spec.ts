@@ -1,3 +1,4 @@
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Roles } from './enums/roles.enum';
 import * as bcrypt from 'bcrypt';
@@ -216,5 +217,102 @@ describe('AuthService.validateUser', () => {
       expect.objectContaining({ email: 'sys@ames.test', rol: Roles.ADMIN_SISTEMA }),
     );
     expect(tenantsService.findById).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.verifyCurrentPassword', () => {
+  const jwtService = { sign: jest.fn(() => 'token') };
+  const usersService = {
+    findByIdWithPassword: jest.fn(),
+  };
+  const tenantsService = {
+    findById: jest.fn(),
+  };
+  const service = new AuthService(
+    usersService as any,
+    jwtService as any,
+    tenantsService as any,
+  );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('password incorrecta → 400 y no firma JWT', async () => {
+    usersService.findByIdWithPassword.mockResolvedValue({
+      _id: 'u1',
+      passwordHash: 'hash',
+      activo: true,
+      rol: Roles.OPERATIVO,
+      tenantId: 't1',
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+    await expect(service.verifyCurrentPassword('u1', 'mala')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('password correcta → no firma JWT', async () => {
+    usersService.findByIdWithPassword.mockResolvedValue({
+      _id: 'u1',
+      passwordHash: 'hash',
+      activo: true,
+      rol: Roles.OPERATIVO,
+      tenantId: 't1',
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    tenantsService.findById.mockResolvedValue({ _id: 't1', activo: true });
+
+    await expect(service.verifyCurrentPassword('u1', 'ok')).resolves.toBeUndefined();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('usuario inactivo → 401 y no compara password', async () => {
+    usersService.findByIdWithPassword.mockResolvedValue({
+      _id: 'u1',
+      passwordHash: 'hash',
+      activo: false,
+      rol: Roles.OPERATIVO,
+      tenantId: 't1',
+    });
+
+    await expect(service.verifyCurrentPassword('u1', 'ok')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(bcrypt.compare).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('operativo de tenant inactivo → 401', async () => {
+    usersService.findByIdWithPassword.mockResolvedValue({
+      _id: 'u1',
+      passwordHash: 'hash',
+      activo: true,
+      rol: Roles.OPERATIVO,
+      tenantId: 't-off',
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    tenantsService.findById.mockResolvedValue({ _id: 't-off', activo: false });
+
+    await expect(service.verifyCurrentPassword('u1', 'ok')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('admin_sistema no consulta Tenant.activo', async () => {
+    usersService.findByIdWithPassword.mockResolvedValue({
+      _id: 'u2',
+      passwordHash: 'hash',
+      activo: true,
+      rol: Roles.ADMIN_SISTEMA,
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    await expect(service.verifyCurrentPassword('u2', 'ok')).resolves.toBeUndefined();
+    expect(tenantsService.findById).not.toHaveBeenCalled();
+    expect(jwtService.sign).not.toHaveBeenCalled();
   });
 });
