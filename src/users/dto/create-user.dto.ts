@@ -5,9 +5,13 @@ import {
   IsOptional,
   IsEnum,
   IsMongoId,
-  MinLength,
 } from 'class-validator';
 import { Roles } from '../../auth/enums/roles.enum';
+import {
+  IsUserPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '../password-policy';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -20,10 +24,11 @@ export class CreateUserDto {
   @ApiProperty({
     description: 'Contraseña del usuario',
     example: 'password123',
-    minLength: 6,
+    minLength: PASSWORD_MIN_LENGTH,
+    maxLength: PASSWORD_MAX_LENGTH,
   })
   @IsString()
-  @MinLength(6)
+  @IsUserPassword()
   password: string;
 
   @ApiProperty({

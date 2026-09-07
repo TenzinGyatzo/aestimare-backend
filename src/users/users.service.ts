@@ -15,6 +15,7 @@ import * as bcrypt from 'bcrypt';
 import { User, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { assertUserPasswordPolicy } from './password-policy';
 import { FilterUserDto } from './dto/filter-user.dto';
 import { Roles } from '../auth/enums/roles.enum';
 import { TenantsService } from '../tenants/tenants.service';
@@ -317,6 +318,7 @@ export class UsersService implements OnModuleInit {
 
     const tenantObjectId = await this.resolveTenantForRole(rol, tenantIdForRole);
 
+    assertUserPasswordPolicy(createUserDto.password);
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(createUserDto.password, saltRounds);
 
@@ -559,6 +561,7 @@ export class UsersService implements OnModuleInit {
     }
 
     if (updateUserDto.password) {
+      assertUserPasswordPolicy(updateUserDto.password);
       const saltRounds = 10;
       setData.passwordHash = await bcrypt.hash(
         updateUserDto.password,

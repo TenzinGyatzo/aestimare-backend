@@ -10,6 +10,11 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import {
+  IsUserPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '../../users/password-policy';
 
 export class OnboardTenantInfoDto {
   @ApiProperty({ example: 'Demo SA' })
@@ -44,10 +49,13 @@ export class OnboardAdminDto {
   @MaxLength(320)
   email: string;
 
-  @ApiProperty({ example: 'secreto1', minLength: 6 })
+  @ApiProperty({
+    example: 'secreto123',
+    minLength: PASSWORD_MIN_LENGTH,
+    maxLength: PASSWORD_MAX_LENGTH,
+  })
   @IsString()
-  @MinLength(6)
-  @MaxLength(200)
+  @IsUserPassword()
   password: string;
 }
 

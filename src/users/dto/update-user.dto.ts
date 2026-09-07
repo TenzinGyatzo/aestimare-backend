@@ -6,10 +6,14 @@ import {
   IsEnum,
   IsBoolean,
   IsMongoId,
-  MinLength,
   ValidateIf,
 } from 'class-validator';
 import { Roles } from '../../auth/enums/roles.enum';
+import {
+  IsUserPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '../password-policy';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({
@@ -21,11 +25,13 @@ export class UpdateUserDto {
 
   @ApiPropertyOptional({
     description: 'Nueva contraseña del usuario',
-    minLength: 6,
+    minLength: PASSWORD_MIN_LENGTH,
+    maxLength: PASSWORD_MAX_LENGTH,
   })
   @IsOptional()
+  @ValidateIf((_, value) => value !== '')
   @IsString()
-  @MinLength(6)
+  @IsUserPassword()
   password?: string;
 
   @ApiPropertyOptional({

@@ -1,4 +1,5 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsUserPassword } from '../../users/password-policy';
 
 export class ResetPasswordDto {
   @IsEmail({}, { message: 'El email debe ser válido' })
@@ -10,7 +11,6 @@ export class ResetPasswordDto {
   token: string;
 
   @IsString({ message: 'La nueva contraseña debe ser una cadena de texto' })
-  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
-  @IsNotEmpty({ message: 'La nueva contraseña es requerida' })
+  @IsUserPassword()
   newPassword: string;
 }

@@ -1,12 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsString,
-  IsEmail,
-  IsOptional,
-  IsEnum,
-  MinLength,
-} from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
 import { Roles } from '../enums/roles.enum';
+import {
+  IsUserPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '../../users/password-policy';
 
 export class RegisterDto {
   @ApiProperty({
@@ -19,10 +18,11 @@ export class RegisterDto {
   @ApiProperty({
     description: 'Contraseña del usuario',
     example: 'password123',
-    minLength: 6,
+    minLength: PASSWORD_MIN_LENGTH,
+    maxLength: PASSWORD_MAX_LENGTH,
   })
   @IsString()
-  @MinLength(6)
+  @IsUserPassword()
   password: string;
 
   @ApiProperty({

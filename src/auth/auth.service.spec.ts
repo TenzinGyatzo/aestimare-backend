@@ -128,6 +128,31 @@ describe('AuthService.validateUser', () => {
     expect(bcrypt.compare).not.toHaveBeenCalled();
   });
 
+  it('password legacy corta sigue compare y no usa política de nueva password', async () => {
+    usersService.findByEmailWithPassword.mockResolvedValue({
+      email: 'legacy@ames.test',
+      passwordHash: 'hash',
+      activo: true,
+      rol: Roles.OPERATIVO,
+      tenantId: 't1',
+      toObject: () => ({
+        email: 'legacy@ames.test',
+        activo: true,
+        rol: Roles.OPERATIVO,
+        tenantId: 't1',
+      }),
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    tenantsService.findById.mockResolvedValue({ _id: 't1', activo: true });
+
+    const result = await service.validateUser('legacy@ames.test', 'abc123');
+
+    expect(result).toEqual(
+      expect.objectContaining({ email: 'legacy@ames.test', activo: true }),
+    );
+    expect(bcrypt.compare).toHaveBeenCalledWith('abc123', 'hash');
+  });
+
   it('acepta usuario activo con password válida y tenant activo', async () => {
     usersService.findByEmailWithPassword.mockResolvedValue({
       email: 'activo@ames.test',
@@ -251,6 +276,24 @@ describe('AuthService.verifyCurrentPassword', () => {
     await expect(service.verifyCurrentPassword('u1', 'mala')).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    expect(jwtService.sign).not.toHaveBeenCalled();
+  });
+
+  it('legacy corta desbloquea por compare sin firmar JWT', async () => {
+    usersService.findByIdWithPassword.mockResolvedValue({
+      _id: 'u1',
+      passwordHash: 'hash',
+      activo: true,
+      rol: Roles.OPERATIVO,
+      tenantId: 't1',
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    tenantsService.findById.mockResolvedValue({ _id: 't1', activo: true });
+
+    await expect(
+      service.verifyCurrentPassword('u1', 'abc123'),
+    ).resolves.toBeUndefined();
+    expect(bcrypt.compare).toHaveBeenCalledWith('abc123', 'hash');
     expect(jwtService.sign).not.toHaveBeenCalled();
   });
 

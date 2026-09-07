@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
+import * as bcrypt from 'bcrypt';
 import { UsersService } from './users.service';
 import { Roles } from '../auth/enums/roles.enum';
 
@@ -42,7 +43,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
     await expect(
       service.create({
         email: 'op@ames.mx',
-        password: 'secret1',
+        password: 'secreto123',
         nombre: 'Op',
         rol: Roles.OPERATIVO,
       }),
@@ -71,7 +72,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
 
     const doc = await service.create({
       email: 'OP@AMES.MX',
-      password: 'secret1',
+      password: 'secreto123',
       nombre: 'Op',
       rol: Roles.OPERATIVO,
       tenantId: tenantId.toString(),
@@ -85,7 +86,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
     await expect(
       service.create({
         email: 'admin@ames.mx',
-        password: 'secret1',
+        password: 'secreto123',
         nombre: 'Admin',
         rol: Roles.ADMIN_SISTEMA,
         tenantId: tenantId.toString(),
@@ -97,7 +98,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
     await expect(
       service.create({
         email: 'at@ames.mx',
-        password: 'secret1',
+        password: 'secreto123',
         nombre: 'AT',
         rol: Roles.ADMIN_TENANT,
       }),
@@ -125,7 +126,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
 
     const doc = await service.create({
       email: 'at@ames.mx',
-      password: 'secret1',
+      password: 'secreto123',
       nombre: 'AT',
       rol: Roles.ADMIN_TENANT,
       tenantId: tenantId.toString(),
@@ -193,7 +194,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
     await expect(
       service.create({
         email: 'a@a.com',
-        password: 'secret1',
+        password: 'secreto123',
         nombre: 'A',
         rol: Roles.ADMIN_SISTEMA,
       }),
@@ -221,7 +222,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
     await expect(
       service.create({
         email: 'x@ames.mx',
-        password: 'secret1',
+        password: 'secreto123',
         nombre: 'X',
       } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -231,7 +232,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
     await expect(
       service.create({
         email: 'x@ames.mx',
-        password: 'secret1',
+        password: 'secreto123',
         nombre: '   ',
         rol: Roles.ADMIN_SISTEMA,
       }),
@@ -282,7 +283,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
       await service.create(
         {
           email: 'op2@ames.mx',
-          password: 'secret1',
+          password: 'secreto123',
           nombre: 'Op2',
           rol: Roles.OPERATIVO,
           tenantId: tenantId.toString(),
@@ -297,7 +298,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
         service.create(
           {
             email: 'sys@ames.mx',
-            password: 'secret1',
+            password: 'secreto123',
             nombre: 'Sys',
             rol: Roles.ADMIN_SISTEMA,
           },
@@ -311,7 +312,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
         service.create(
           {
             email: 'op3@ames.mx',
-            password: 'secret1',
+            password: 'secreto123',
             nombre: 'Op3',
             rol: Roles.OPERATIVO,
             tenantId: otherTenant,
@@ -380,7 +381,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
       await service.create(
         {
           email: 'op4@ames.mx',
-          password: 'secret1',
+          password: 'secreto123',
           nombre: 'Op4',
           rol: Roles.OPERATIVO,
         },
@@ -398,7 +399,7 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
         service.create(
           {
             email: 'op5@ames.mx',
-            password: 'secret1',
+            password: 'secreto123',
             nombre: 'Op5',
             rol: Roles.OPERATIVO,
           },
@@ -727,6 +728,108 @@ describe('UsersService (Story 1.6 / 2.3)', () => {
           actorTenant,
         ),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('password policy', () => {
+    function mockSaveModel() {
+      const save = jest.fn().mockResolvedValue({
+        toObject: () => ({ email: 'op@ames.mx' }),
+      });
+      const ModelCtor = function (this: any, data: any) {
+        Object.assign(this, data);
+        this.save = save;
+      } as any;
+      (service as any).userModel = Object.assign(ModelCtor, userModel);
+      return save;
+    }
+
+    function mockUpdateCurrent(current: Record<string, unknown>) {
+      userModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(current),
+      });
+      userModel.findByIdAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ ...current }),
+      });
+    }
+
+    it('create password débil no persiste ni hashea', async () => {
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      const save = mockSaveModel();
+
+      await expect(
+        service.create({
+          email: 'op@ames.mx',
+          password: 'abc123',
+          nombre: 'Op',
+          rol: Roles.OPERATIVO,
+          tenantId: tenantId.toString(),
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('create hashea la cadena exacta sin trim (bcrypt 10)', async () => {
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      let captured: { passwordHash?: string } = {};
+      const save = jest.fn().mockResolvedValue({ toObject: () => captured });
+      const ModelCtor = function (this: any, data: any) {
+        captured = data;
+        Object.assign(this, data);
+        this.save = save;
+      } as any;
+      (service as any).userModel = Object.assign(ModelCtor, userModel);
+      const raw = '  ab12cd  ';
+
+      await service.create({
+        email: 'op@ames.mx',
+        password: raw,
+        nombre: 'Op',
+        rol: Roles.OPERATIVO,
+        tenantId: tenantId.toString(),
+      });
+
+      expect(save).toHaveBeenCalled();
+      expect(captured.passwordHash).toBeDefined();
+      await expect(bcrypt.compare(raw, captured.passwordHash!)).resolves.toBe(
+        true,
+      );
+      await expect(
+        bcrypt.compare(raw.trim(), captured.passwordHash!),
+      ).resolves.toBe(false);
+    });
+
+    it('update password débil no persiste', async () => {
+      const userId = new Types.ObjectId();
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      mockUpdateCurrent({
+        _id: userId,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: true,
+        passwordHash: 'prev-hash',
+      });
+
+      await expect(
+        service.update(userId.toString(), { password: 'abc123' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(userModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('update sin password no toca passwordHash', async () => {
+      const userId = new Types.ObjectId();
+      tenantsService.findById.mockResolvedValue({ _id: tenantId, activo: true });
+      mockUpdateCurrent({
+        _id: userId,
+        rol: Roles.OPERATIVO,
+        tenantId,
+        activo: true,
+      });
+
+      await service.update(userId.toString(), { nombre: 'Nuevo' });
+
+      const updateArg = userModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(updateArg.$set.passwordHash).toBeUndefined();
     });
   });
 });
