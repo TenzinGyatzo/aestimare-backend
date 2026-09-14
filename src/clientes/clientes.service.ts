@@ -8,18 +8,31 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Cliente, ClienteDocument } from './schemas/cliente.schema';
+import { Contacto, ContactoDocument } from './schemas/contacto.schema';
+import {
+  Cotizacion,
+  CotizacionDocument,
+} from '../cotizaciones/schemas/cotizacion.schema';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
 import { FilterClienteDto } from './dto/filter-cliente.dto';
-import { PaginatedClientesResponseDto } from './dto/paginated-clientes-response.dto';
+import {
+  ClienteListItemDto,
+  PaginatedClientesResponseDto,
+} from './dto/paginated-clientes-response.dto';
 import { TenantContextService } from '../tenants/tenant-context.service';
 import { assertStrictObjectIdOrNotFound } from '../common/strict-object-id';
+
+type CountGroup = { _id?: unknown; n?: number };
 
 @Injectable()
 export class ClientesService {
   constructor(
     @InjectModel(Cliente.name) private clienteModel: Model<ClienteDocument>,
     private tenantContext: TenantContextService,
+    @InjectModel(Contacto.name) private contactoModel: Model<ContactoDocument>,
+    @InjectModel(Cotizacion.name)
+    private cotizacionModel: Model<CotizacionDocument>,
   ) {}
 
   private isDuplicateKeyError(err: unknown): boolean {
@@ -130,7 +143,7 @@ export class ClientesService {
       };
     }
 
-    const [data, total] = await Promise.all([
+    const [docs, total] = await Promise.all([
       this.clienteModel
         .find(matchConditions)
         .sort({ empresa: 1 })
@@ -141,12 +154,89 @@ export class ClientesService {
     ]);
 
     return {
-      data,
+      data: (await this.attachPageCounts(tenantId, docs)) as ClienteListItemDto[],
       total,
       page,
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit) || 1),
     };
+  }
+
+  private countsByClienteId(groups: CountGroup[]): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const g of groups) {
+      if (g?._id == null) continue;
+      map.set(String(g._id), Number(g.n) || 0);
+    }
+    return map;
+  }
+
+  private toPlainCliente(doc: unknown): Record<string, unknown> {
+    if (
+      doc &&
+      typeof doc === 'object' &&
+      'toObject' in doc &&
+      typeof (doc as { toObject: () => Record<string, unknown> }).toObject ===
+        'function'
+    ) {
+      return (doc as { toObject: () => Record<string, unknown> }).toObject();
+    }
+    return { ...(doc as Record<string, unknown>) };
+  }
+
+  /** Conteos solo de la página: contactos activos + cotizaciones no canceladas. */
+  private async attachPageCounts(
+    tenantId: unknown,
+    docs: unknown[],
+  ): Promise<unknown[]> {
+    if (docs.length === 0) return [];
+
+    const pageIds = docs
+      .map((d) => (d as { _id?: unknown })._id)
+      .filter((id) => id != null);
+    if (pageIds.length === 0) {
+      return docs.map((doc) => ({
+        ...this.toPlainCliente(doc),
+        totalContactos: 0,
+        totalCotizaciones: 0,
+      }));
+    }
+
+    const [contactoGroups, cotizGroups] = await Promise.all([
+      this.contactoModel.aggregate<CountGroup>([
+        {
+          $match: {
+            tenantId,
+            clienteId: { $in: pageIds },
+            activo: { $ne: false },
+          },
+        },
+        { $group: { _id: '$clienteId', n: { $sum: 1 } } },
+      ]),
+      this.cotizacionModel.aggregate<CountGroup>([
+        {
+          $match: {
+            tenantId,
+            clienteId: { $in: pageIds },
+            estado: { $ne: 'cancelada' },
+          },
+        },
+        { $group: { _id: '$clienteId', n: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const contactos = this.countsByClienteId(contactoGroups);
+    const cotizaciones = this.countsByClienteId(cotizGroups);
+
+    return docs.map((doc) => {
+      const obj = this.toPlainCliente(doc);
+      const id = String(obj._id ?? '');
+      return {
+        ...obj,
+        totalContactos: contactos.get(id) ?? 0,
+        totalCotizaciones: cotizaciones.get(id) ?? 0,
+      };
+    });
   }
 
   /** Story 7.3 — dashboard Totales.clientes */

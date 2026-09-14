@@ -118,6 +118,8 @@ describe('ClientesService.countActive (Story 7.3)', () => {
     const service = new ClientesService(
       { countDocuments } as any,
       { getTenantId: () => tenantId } as any,
+      {} as any,
+      {} as any,
     );
     const n = await service.countActive();
     expect(n).toBe(5);

@@ -30,28 +30,42 @@ describe('ClientesService (Stories 3.1–3.2)', () => {
   clienteModel.findOneAndUpdate = jest.fn();
   clienteModel.countDocuments = jest.fn();
 
+  const contactoModel: any = { aggregate: jest.fn().mockResolvedValue([]) };
+  const cotizacionModel: any = { aggregate: jest.fn().mockResolvedValue([]) };
+
   const tenantContext = {
     getTenantId: jest.fn().mockReturnValue(tenantId),
   } as unknown as TenantContextService;
 
-  const service = new ClientesService(clienteModel as any, tenantContext);
+  const service = new ClientesService(
+    clienteModel as any,
+    tenantContext,
+    contactoModel,
+    cotizacionModel,
+  );
+
+  function mockFindAll(docs: unknown[], total = docs.length) {
+    const execFind = jest.fn().mockResolvedValue(docs);
+    const limit = jest.fn().mockReturnValue({ exec: execFind });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const sort = jest.fn().mockReturnValue({ skip });
+    clienteModel.find.mockReturnValue({ sort });
+    clienteModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(total),
+    });
+  }
 
   beforeEach(() => {
     jest.clearAllMocks();
     savedDocs.length = 0;
     (tenantContext.getTenantId as jest.Mock).mockReturnValue(tenantId);
     clienteModel.mockClear();
+    contactoModel.aggregate.mockResolvedValue([]);
+    cotizacionModel.aggregate.mockResolvedValue([]);
   });
 
   it('findAll default solo activos + paginado scoped', async () => {
-    const execFind = jest.fn().mockResolvedValue([{ empresa: 'A' }]);
-    const limit = jest.fn().mockReturnValue({ exec: execFind });
-    const skip = jest.fn().mockReturnValue({ limit });
-    const sort = jest.fn().mockReturnValue({ skip });
-    clienteModel.find.mockReturnValue({ sort });
-    clienteModel.countDocuments.mockReturnValue({
-      exec: jest.fn().mockResolvedValue(1),
-    });
+    mockFindAll([{ empresa: 'A' }], 1);
 
     const res = await service.findAll({ page: 1, limit: 20 });
 
@@ -68,14 +82,7 @@ describe('ClientesService (Stories 3.1–3.2)', () => {
   });
 
   it('findAll activo=false lista inactivos', async () => {
-    const execFind = jest.fn().mockResolvedValue([]);
-    const limit = jest.fn().mockReturnValue({ exec: execFind });
-    const skip = jest.fn().mockReturnValue({ limit });
-    const sort = jest.fn().mockReturnValue({ skip });
-    clienteModel.find.mockReturnValue({ sort });
-    clienteModel.countDocuments.mockReturnValue({
-      exec: jest.fn().mockResolvedValue(0),
-    });
+    mockFindAll([]);
 
     await service.findAll({ activo: false });
 
@@ -85,14 +92,7 @@ describe('ClientesService (Stories 3.1–3.2)', () => {
   });
 
   it('findAll escapa metacaracteres regex', async () => {
-    const execFind = jest.fn().mockResolvedValue([]);
-    const limit = jest.fn().mockReturnValue({ exec: execFind });
-    const skip = jest.fn().mockReturnValue({ limit });
-    const sort = jest.fn().mockReturnValue({ skip });
-    clienteModel.find.mockReturnValue({ sort });
-    clienteModel.countDocuments.mockReturnValue({
-      exec: jest.fn().mockResolvedValue(0),
-    });
+    mockFindAll([]);
 
     await service.findAll({ empresa: 'Acme (SA)' });
 
@@ -143,14 +143,7 @@ describe('ClientesService (Stories 3.1–3.2)', () => {
   });
 
   it('findAll filtra por razonSocial con regex escapado', async () => {
-    const execFind = jest.fn().mockResolvedValue([]);
-    const limit = jest.fn().mockReturnValue({ exec: execFind });
-    const skip = jest.fn().mockReturnValue({ limit });
-    const sort = jest.fn().mockReturnValue({ skip });
-    clienteModel.find.mockReturnValue({ sort });
-    clienteModel.countDocuments.mockReturnValue({
-      exec: jest.fn().mockResolvedValue(0),
-    });
+    mockFindAll([]);
 
     await service.findAll({ razonSocial: 'Pacífico (SA)' });
 
@@ -273,6 +266,79 @@ describe('ClientesService (Stories 3.1–3.2)', () => {
   it('create rechaza empresa vacía', async () => {
     await expect(service.create({ empresa: '   ' })).rejects.toBeInstanceOf(
       BadRequestException,
+    );
+  });
+
+  it('findAll adjunta conteos de la página (activos; sin canceladas)', async () => {
+    const clienteId = new Types.ObjectId();
+    mockFindAll([{ _id: clienteId, empresa: 'Acme', activo: true }], 1);
+    contactoModel.aggregate.mockResolvedValue([{ _id: clienteId, n: 3 }]);
+    cotizacionModel.aggregate.mockResolvedValue([{ _id: clienteId, n: 4 }]);
+
+    const res = await service.findAll({ page: 1, limit: 20 });
+
+    expect(res.data[0]).toEqual(
+      expect.objectContaining({
+        totalContactos: 3,
+        totalCotizaciones: 4,
+      }),
+    );
+    expect(contactoModel.aggregate).toHaveBeenCalledWith([
+      {
+        $match: {
+          tenantId,
+          clienteId: { $in: [clienteId] },
+          activo: { $ne: false },
+        },
+      },
+      { $group: { _id: '$clienteId', n: { $sum: 1 } } },
+    ]);
+    expect(cotizacionModel.aggregate).toHaveBeenCalledWith([
+      {
+        $match: {
+          tenantId,
+          clienteId: { $in: [clienteId] },
+          estado: { $ne: 'cancelada' },
+        },
+      },
+      { $group: { _id: '$clienteId', n: { $sum: 1 } } },
+    ]);
+  });
+
+  it('findAll sin actividad CRM → conteos 0', async () => {
+    const clienteId = new Types.ObjectId();
+    mockFindAll([{ _id: clienteId, empresa: 'Vacio' }], 1);
+
+    const res = await service.findAll();
+
+    expect(res.data[0].totalContactos).toBe(0);
+    expect(res.data[0].totalCotizaciones).toBe(0);
+  });
+
+  it('findAll página vacía no agrega conteos', async () => {
+    mockFindAll([]);
+
+    const res = await service.findAll({ empresa: 'zzz' });
+
+    expect(res.data).toEqual([]);
+    expect(contactoModel.aggregate).not.toHaveBeenCalled();
+    expect(cotizacionModel.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('findAll inactivo conserva historial de conteos', async () => {
+    const clienteId = new Types.ObjectId();
+    mockFindAll([{ _id: clienteId, empresa: 'Old', activo: false }], 1);
+    contactoModel.aggregate.mockResolvedValue([{ _id: clienteId, n: 2 }]);
+    cotizacionModel.aggregate.mockResolvedValue([{ _id: clienteId, n: 1 }]);
+
+    const res = await service.findAll({ activo: false });
+
+    expect(res.data[0]).toEqual(
+      expect.objectContaining({
+        activo: false,
+        totalContactos: 2,
+        totalCotizaciones: 1,
+      }),
     );
   });
 });
