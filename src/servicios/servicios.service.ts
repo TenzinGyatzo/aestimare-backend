@@ -31,6 +31,23 @@ import {
 } from '../common/uploads/disk-upload';
 import { ServicioOrden } from './enums/servicio-orden.enum';
 import { TipoItem } from './enums/tipo-item.enum';
+import {
+  assertCatalogoImportFile,
+  buildCatalogoImportPlantilla,
+  buildCatalogoImportReporte,
+  parseCatalogoImportBuffer,
+  toImportErrorRow,
+  validateCatalogoImportRow,
+  type CatalogoImportErrorRow,
+} from './catalogo-import';
+
+export type CatalogoImportResult = {
+  created: number;
+  failed: number;
+  skippedEmpty: number;
+  errors: CatalogoImportErrorRow[];
+  reporteBase64?: string;
+};
 
 const MAX_IMAGEN_BYTES = 1_000_000;
 const WEBP_QUALITY_START = 80;
@@ -116,13 +133,10 @@ export class ServiciosService {
     return cat;
   }
 
-  /**
-   * Resuelve categoría activa del tenant destino por código (multi-tenant).
-   */
-  private async resolveCategoriaIdByCodigo(
+  private async findCategoriaActivaByCodigo(
     codigo: string,
     tenantId: Types.ObjectId,
-  ): Promise<Types.ObjectId> {
+  ): Promise<Types.ObjectId | null> {
     const cat = await this.categoriaModel
       .findOne({
         tenantId,
@@ -130,12 +144,24 @@ export class ServiciosService {
         activo: { $ne: false },
       })
       .exec();
-    if (!cat) {
+    if (!cat) return null;
+    return cat._id as Types.ObjectId;
+  }
+
+  /**
+   * Resuelve categoría activa del tenant destino por código (multi-tenant).
+   */
+  private async resolveCategoriaIdByCodigo(
+    codigo: string,
+    tenantId: Types.ObjectId,
+  ): Promise<Types.ObjectId> {
+    const id = await this.findCategoriaActivaByCodigo(codigo, tenantId);
+    if (!id) {
       throw new BadRequestException(
         `Categoría «${codigo}» no existe o está inactiva en tenant ${String(tenantId)}`,
       );
     }
-    return cat._id as Types.ObjectId;
+    return id;
   }
 
   private buildDocPayload(
@@ -156,6 +182,136 @@ export class ServiciosService {
       moneda: 'MXN',
       activo: dto.activo !== undefined ? dto.activo : true,
     };
+  }
+
+  getCatalogoImportPlantilla(): Promise<Buffer> {
+    return buildCatalogoImportPlantilla();
+  }
+
+  async importFromXlsx(file: {
+    originalname?: string;
+    size?: number;
+    buffer?: Buffer;
+  }): Promise<CatalogoImportResult> {
+    assertCatalogoImportFile(file);
+    const rows = await parseCatalogoImportBuffer(file.buffer as Buffer);
+    const tenantId = this.tenantContext.getTenantId();
+
+    const existentes = (await this.servicioModel
+      .find({ tenantId })
+      .select('nombre codigo')
+      .lean()
+      .exec()) as Array<{ nombre?: string; codigo?: string }>;
+
+    const nombres = new Set(
+      existentes
+        .map((s) => (s.nombre ?? '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+    const codigos = new Set(
+      existentes.map((s) => (s.codigo ?? '').trim()).filter(Boolean),
+    );
+    const seenNombres = new Set<string>();
+    const seenCodigos = new Set<string>();
+
+    let created = 0;
+    let failed = 0;
+    let skippedEmpty = 0;
+    const errors: CatalogoImportErrorRow[] = [];
+
+    for (const raw of rows) {
+      if (raw.empty) {
+        skippedEmpty += 1;
+        continue;
+      }
+      const validated = validateCatalogoImportRow(raw);
+      if ('error' in validated) {
+        failed += 1;
+        errors.push(toImportErrorRow(raw, validated.error));
+        continue;
+      }
+      const nombreKey = validated.nombre.toLowerCase();
+      if (nombres.has(nombreKey) || seenNombres.has(nombreKey)) {
+        failed += 1;
+        errors.push(
+          toImportErrorRow(
+            raw,
+            'Ya existe un ítem con ese nombre en este tenant',
+          ),
+        );
+        continue;
+      }
+      if (
+        validated.codigo &&
+        (codigos.has(validated.codigo) || seenCodigos.has(validated.codigo))
+      ) {
+        failed += 1;
+        errors.push(
+          toImportErrorRow(
+            raw,
+            'Ya existe un ítem con ese código en este tenant',
+          ),
+        );
+        continue;
+      }
+
+      const categoriaId = await this.findCategoriaActivaByCodigo(
+        validated.categoriaCodigo,
+        tenantId,
+      );
+      if (!categoriaId) {
+        failed += 1;
+        errors.push(toImportErrorRow(raw, 'Categoría inválida o inactiva'));
+        continue;
+      }
+
+      try {
+        const dto: CreateServicioDto = {
+          nombre: validated.nombre,
+          precioUnitario: validated.precioUnitario,
+          categoriaId: String(categoriaId),
+          tipo: validated.tipo,
+          activo: validated.activo,
+          ...(validated.codigo ? { codigo: validated.codigo } : {}),
+          ...(validated.descripcion
+            ? { descripcion: validated.descripcion }
+            : {}),
+        };
+        const doc = new this.servicioModel(
+          this.buildDocPayload(dto, tenantId, categoriaId),
+        );
+        await doc.save();
+        created += 1;
+        seenNombres.add(nombreKey);
+        nombres.add(nombreKey);
+        if (validated.codigo) {
+          seenCodigos.add(validated.codigo);
+          codigos.add(validated.codigo);
+        }
+      } catch (err) {
+        failed += 1;
+        const message = this.isDuplicateKeyError(err)
+          ? 'Ya existe un ítem con ese código en este tenant'
+          : 'Error al crear el servicio';
+        errors.push(toImportErrorRow(raw, message));
+      }
+    }
+
+    const result: CatalogoImportResult = {
+      created,
+      failed,
+      skippedEmpty,
+      errors,
+    };
+    if (errors.length) {
+      try {
+        const reporte = await buildCatalogoImportReporte(errors);
+        result.reporteBase64 = reporte.toString('base64');
+      } catch {
+        /* El resumen y errors ya alcanzan para corregir; no tumbar altas hechas. */
+      }
+    }
+    return result;
   }
 
   async create(createServicioDto: CreateServicioDto): Promise<Servicio> {

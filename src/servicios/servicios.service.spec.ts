@@ -1503,3 +1503,234 @@ describe('ServiciosService — imagen producto / Story 8.1', () => {
     expect((list.data[0] as any).imagenUrl).toBe(withImg.imagenUrl);
   });
 });
+
+describe('ServiciosService — carga masiva catálogo', () => {
+  const ExcelJS = require('exceljs') as typeof import('exceljs');
+  const tenantId = new Types.ObjectId();
+  const categoriaId = new Types.ObjectId();
+  const savedDocs: any[] = [];
+
+  const servicioModel: any = jest.fn().mockImplementation((data: any) => {
+    const doc = {
+      ...data,
+      _id: new Types.ObjectId(),
+      save: jest.fn().mockImplementation(async function (this: any) {
+        savedDocs.push(this);
+        return this;
+      }),
+    };
+    return doc;
+  });
+  servicioModel.find = jest.fn();
+
+  const categoriaModel: any = { findOne: jest.fn() };
+  const tenantContext = {
+    getTenantId: jest.fn().mockReturnValue(tenantId),
+  } as unknown as TenantContextService;
+  const tenantsService = { findById: jest.fn() } as unknown as TenantsService;
+  const service = new ServiciosService(
+    servicioModel as any,
+    categoriaModel as any,
+    tenantContext,
+    tenantsService,
+  );
+
+  async function xlsxFromRows(
+    rows: (string | number)[][],
+    headers: string[] = [
+      'tipo',
+      'nombre',
+      'codigo',
+      'categoria',
+      'precio',
+      'descripcion',
+      'activo',
+    ],
+    sheetName = 'Datos',
+  ): Promise<Buffer> {
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet(sheetName);
+    sheet.addRow(headers);
+    for (const row of rows) sheet.addRow(row);
+    return Buffer.from(await wb.xlsx.writeBuffer());
+  }
+
+  function fileFrom(buffer: Buffer, name = 'carga.xlsx') {
+    return { buffer, originalname: name, size: buffer.length };
+  }
+
+  function mockExisting(
+    docs: Array<{ nombre?: string; codigo?: string }> = [],
+  ) {
+    servicioModel.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue(docs),
+        }),
+      }),
+    });
+  }
+
+  function mockCategoria(codigo = 'MED', found = true) {
+    categoriaModel.findOne.mockImplementation((q: { codigo?: string }) => ({
+      exec: jest.fn().mockResolvedValue(
+        found && (!q.codigo || q.codigo === codigo)
+          ? { _id: categoriaId, tenantId, codigo, activo: true }
+          : null,
+      ),
+    }));
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    savedDocs.length = 0;
+    (tenantContext.getTenantId as jest.Mock).mockReturnValue(tenantId);
+    servicioModel.mockClear();
+    mockExisting([]);
+    mockCategoria();
+  });
+
+  it('happy path crea filas válidas', async () => {
+    const buffer = await xlsxFromRows([
+      ['servicio', 'Consulta general', 'CONS-001', 'MED', 500, 'Desc', 'si'],
+      ['producto', 'Kit', 'KIT-001', 'MED', 150, '', 'si'],
+    ]);
+    const result = await service.importFromXlsx(fileFrom(buffer));
+    expect(result.created).toBe(2);
+    expect(result.failed).toBe(0);
+    expect(savedDocs).toHaveLength(2);
+    expect(savedDocs[0].tipo).toBe(TipoItem.SERVICIO);
+    expect(savedDocs[1].tipo).toBe(TipoItem.PRODUCTO);
+    expect(result.reporteBase64).toBeUndefined();
+  });
+
+  it('mixto crea válidas y reporta fallos', async () => {
+    const buffer = await xlsxFromRows([
+      ['servicio', 'Consulta A', 'A-1', 'MED', 100, '', 'si'],
+      ['servicio', 'Consulta B', 'B-1', 'XXX', 100, '', 'si'],
+      ['servicio', 'Consulta C', 'C-1', 'MED', 100, '', 'si'],
+    ]);
+    const result = await service.importFromXlsx(fileFrom(buffer));
+    expect(result.created).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.errors[0].error).toBe('Categoría inválida o inactiva');
+    expect(result.errors[0].row).toBe(3);
+    expect(result.reporteBase64).toBeTruthy();
+  });
+
+  it('código existente no actualiza', async () => {
+    mockExisting([{ nombre: 'Otro', codigo: 'SKU-1' }]);
+    const buffer = await xlsxFromRows([
+      ['servicio', 'Nuevo nombre', 'SKU-1', 'MED', 10, '', 'si'],
+      ['servicio', 'Otro ítem', 'SKU-2', 'MED', 10, '', 'si'],
+    ]);
+    const result = await service.importFromXlsx(fileFrom(buffer));
+    expect(result.created).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(result.errors[0].error).toMatch(/código/);
+    expect(savedDocs[0].nombre).toBe('Otro ítem');
+  });
+
+  it('nombre duplicado (case) en tenant o archivo falla', async () => {
+    mockExisting([{ nombre: 'Consulta General' }]);
+    const buffer = await xlsxFromRows([
+      ['servicio', 'consulta general', '', 'MED', 10, '', 'si'],
+      ['servicio', 'Gemelo', '', 'MED', 10, '', 'si'],
+      ['servicio', 'gemelo', '', 'MED', 20, '', 'si'],
+    ]);
+    const result = await service.importFromXlsx(fileFrom(buffer));
+    expect(result.created).toBe(1);
+    expect(result.failed).toBe(2);
+    expect(result.errors.every((e) => /nombre/.test(e.error))).toBe(true);
+  });
+
+  it('archivo inválido: extensión, headers y tope', async () => {
+    await expect(
+      service.importFromXlsx(fileFrom(Buffer.from('x'), 'carga.csv')),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const badHeaders = await xlsxFromRows([['servicio', 'X', '', 'MED', 1]], [
+      'foo',
+      'nombre',
+      'codigo',
+      'categoria',
+      'precio',
+    ]);
+    await expect(service.importFromXlsx(fileFrom(badHeaders))).rejects.toThrow(
+      /Faltan columnas/,
+    );
+
+    const tooMany = await xlsxFromRows(
+      Array.from({ length: 501 }, (_, i) => [
+        'servicio',
+        `Item ${i}`,
+        '',
+        'MED',
+        1,
+      ]),
+    );
+    await expect(service.importFromXlsx(fileFrom(tooMany))).rejects.toThrow(
+      /500 filas/,
+    );
+    expect(savedDocs).toHaveLength(0);
+  });
+
+  it('precio 1,500 (miles) no se importa como 1.5', async () => {
+    const buffer = await xlsxFromRows([
+      ['servicio', 'Precio malo', 'P-1', 'MED', '1,500', '', 'si'],
+      ['servicio', 'Precio ok', 'P-2', 'MED', '1500,50', '', 'si'],
+    ]);
+    const result = await service.importFromXlsx(fileFrom(buffer));
+    expect(result.created).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(result.errors[0].error).toMatch(/precio/);
+    expect(savedDocs[0].precioUnitario).toBe(1500.5);
+  });
+
+  it('solo headers → 0 created, sin error de archivo', async () => {
+    const buffer = await xlsxFromRows([]);
+    const result = await service.importFromXlsx(fileFrom(buffer));
+    expect(result.created).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('reintento: columna extra error se ignora', async () => {
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Datos');
+    sheet.addRow([
+      'tipo',
+      'nombre',
+      'codigo',
+      'categoria',
+      'precio',
+      'descripcion',
+      'activo',
+      'error',
+    ]);
+    sheet.addRow([
+      'servicio',
+      'Desde reporte',
+      'REP-1',
+      'MED',
+      30,
+      '',
+      'si',
+      'Categoría inválida o inactiva',
+    ]);
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    const result = await service.importFromXlsx(fileFrom(buffer));
+    expect(result.created).toBe(1);
+    expect(savedDocs[0].nombre).toBe('Desde reporte');
+  });
+
+  it('plantilla tiene hojas Instrucciones y Datos', async () => {
+    const buffer = await service.getCatalogoImportPlantilla();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    expect(wb.getWorksheet('Instrucciones')).toBeTruthy();
+    const datos = wb.getWorksheet('Datos');
+    expect(datos).toBeTruthy();
+    expect(datos!.getRow(1).getCell(1).value).toBe('tipo');
+  });
+});

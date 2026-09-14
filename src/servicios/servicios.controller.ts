@@ -14,6 +14,8 @@ import {
   UseFilters,
   UseGuards,
   UseInterceptors,
+  StreamableFile,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -42,6 +44,9 @@ import { Roles as RolesDecorator } from '../auth/decorators/roles.decorator';
 import { TenantContextGuard } from '../tenants/tenant-context.guard';
 import { TenantContextInterceptor } from '../tenants/tenant-context.interceptor';
 import { MulterBadRequestFilter } from '../common/uploads/multer-bad-request.filter';
+import { MulterCatalogoImportFilter } from '../common/uploads/multer-catalogo-import.filter';
+import { CATALOGO_IMPORT_MAX_BYTES } from './catalogo-import';
+import type { Response } from 'express';
 import { SERVICIO_ORDEN_VALUES } from './enums/servicio-orden.enum';
 import { TIPO_ITEM_VALUES } from './enums/tipo-item.enum';
 
@@ -124,6 +129,46 @@ export class ServiciosController {
     @Query() filters?: FilterServicioDto,
   ): Promise<PaginatedServiciosResponseDto> {
     return this.serviciosService.findAll(filters);
+  }
+
+  @Get('import/plantilla')
+  @ApiOperation({ summary: 'Descargar plantilla Excel de carga masiva' })
+  @ApiResponse({ status: 200, description: 'Archivo .xlsx' })
+  async downloadImportPlantilla(
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const buffer = await this.serviciosService.getCatalogoImportPlantilla();
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="plantilla-catalogo.xlsx"',
+    });
+    return new StreamableFile(buffer);
+  }
+
+  @Post('import')
+  @UseFilters(MulterCatalogoImportFilter)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: CATALOGO_IMPORT_MAX_BYTES },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({ summary: 'Carga masiva de productos y servicios (.xlsx)' })
+  @ApiResponse({ status: 201, description: 'Resumen de importación' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido' })
+  importCatalogo(@UploadedFile() file?: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Debe adjuntar un archivo .xlsx');
+    }
+    return this.serviciosService.importFromXlsx(file);
   }
 
   @Post(':id/imagen')
