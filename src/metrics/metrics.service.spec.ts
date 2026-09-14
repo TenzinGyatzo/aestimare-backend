@@ -6,6 +6,10 @@ import { FilterMetricsDto } from './dto/filter-metrics.dto';
 import { MetricsService } from './metrics.service';
 import { TipoItem } from '../servicios/enums/tipo-item.enum';
 
+function isVolumeMatch(filter: any): boolean {
+  return filter?.estado?.$ne === 'cancelada';
+}
+
 describe('MetricsService (Story 7.1 / 7.2)', () => {
   const tenantA = new Types.ObjectId();
   const tenantB = new Types.ObjectId();
@@ -28,7 +32,8 @@ describe('MetricsService (Story 7.1 / 7.2)', () => {
         if (filter?.estado === 'aceptada') return 4;
         if (filter?.estado === 'rechazada') return 2;
         if (filter?.estado === 'cancelada') return 0;
-        return 10;
+        if (isVolumeMatch(filter)) return 10;
+        return 12;
       }),
       aggregate: jest.fn().mockImplementation((pipeline: any[]) => {
         aggregatePipelines.push(pipeline);
@@ -51,31 +56,40 @@ describe('MetricsService (Story 7.1 / 7.2)', () => {
     expect(totals.cotizacionesCanceladas).toBe(0);
     expect(totals.cotizacionesTotales).toBe(10);
     expect(totals.tasaConversion).toBeCloseTo(0.4);
+    const volumeCounts = countCalls.filter((f) => isVolumeMatch(f));
+    expect(volumeCounts.length).toBe(4);
+    for (const filter of volumeCounts) {
+      expect(filter.estado).toEqual({ $ne: 'cancelada' });
+    }
   });
 
-  it('tasaConversion excluye canceladas del denominador', async () => {
+  it('tasaConversion usa emitidas (sin restar canceladas dedicadas)', async () => {
     ModelCtor.countDocuments.mockImplementation(async (filter: any) => {
       countCalls.push(filter);
       if (filter?.estado === 'aceptada') return 4;
       if (filter?.estado === 'rechazada') return 2;
       if (filter?.estado === 'cancelada') return 2;
-      return 10;
+      if (isVolumeMatch(filter)) return 10;
+      return 12;
     });
     const totals = await service.getTotalsMetrics();
-    // 4 / (10 − 2) = 0.5
+    // 4 / 10 = 0.4 (canceladas=2 no restan del denominador)
     expect(totals.cotizacionesCanceladas).toBe(2);
-    expect(totals.tasaConversion).toBeCloseTo(0.5);
+    expect(totals.cotizacionesEmitidas).toBe(10);
+    expect(totals.tasaConversion).toBeCloseTo(0.4);
   });
 
-  it('tasaConversion 0 si todas las emitidas están canceladas', async () => {
+  it('tasaConversion 0 si emitidas = 0 (periodo solo canceladas)', async () => {
     ModelCtor.countDocuments.mockImplementation(async (filter: any) => {
       countCalls.push(filter);
       if (filter?.estado === 'aceptada') return 0;
       if (filter?.estado === 'rechazada') return 0;
       if (filter?.estado === 'cancelada') return 10;
-      return 10;
+      if (isVolumeMatch(filter)) return 0;
+      return 0;
     });
     const totals = await service.getTotalsMetrics();
+    expect(totals.cotizacionesEmitidas).toBe(0);
     expect(totals.tasaConversion).toBe(0);
   });
 
@@ -89,7 +103,7 @@ describe('MetricsService (Story 7.1 / 7.2)', () => {
 
     const emitidasFilter = countCalls.find(
       (f) =>
-        !f.estado &&
+        isVolumeMatch(f) &&
         f.fechaCreacion?.$gte?.getTime() === desde &&
         f.fechaCreacion?.$lte?.getTime() === hasta &&
         !f.fechaCreacion?.$lt,
@@ -122,7 +136,7 @@ describe('MetricsService (Story 7.1 / 7.2)', () => {
     });
 
     const hoyFilter = countCalls.find(
-      (f) => !f.estado && f.fechaCreacion?.$lt instanceof Date,
+      (f) => isVolumeMatch(f) && f.fechaCreacion?.$lt instanceof Date,
     );
     expect(hoyFilter).toBeDefined();
     // Intersección: gana el $gte más tardío (usuario), no startOfDay
@@ -145,7 +159,7 @@ describe('MetricsService (Story 7.1 / 7.2)', () => {
     });
 
     const hoyFilter = countCalls.find(
-      (f) => !f.estado && f.fechaCreacion?.$lt instanceof Date,
+      (f) => isVolumeMatch(f) && f.fechaCreacion?.$lt instanceof Date,
     );
     expect(hoyFilter).toBeDefined();
     expect(hoyFilter.fechaCreacion.$gte.getTime()).toBe(startOfToday.getTime());
@@ -154,7 +168,7 @@ describe('MetricsService (Story 7.1 / 7.2)', () => {
   it('Hoy usa $lt fin de día (no cuenta fechas futuras indefinidas)', async () => {
     await service.getTotalsMetrics();
     const hoyFilter = countCalls.find(
-      (f) => !f.estado && f.fechaCreacion?.$lt instanceof Date,
+      (f) => isVolumeMatch(f) && f.fechaCreacion?.$lt instanceof Date,
     );
     expect(hoyFilter).toBeDefined();
     const start = new Date();
@@ -179,11 +193,14 @@ describe('MetricsService (Story 7.1 / 7.2)', () => {
     const firstMatch = pipeline.find((s: any) => s.$match?.tenantId);
     expect(String(firstMatch.$match.tenantId)).toBe(String(tenantB));
     expect(String(firstMatch.$match.tenantId)).not.toBe(String(tenantA));
+    expect(firstMatch.$match.estado).toEqual({ $ne: 'cancelada' });
   });
 
   it('lookup clientes incluye match de tenantId', async () => {
     await service.getClientsMetrics();
     const pipeline = aggregatePipelines[0];
+    const firstMatch = pipeline.find((s: any) => s.$match?.tenantId);
+    expect(firstMatch.$match.estado).toEqual({ $ne: 'cancelada' });
     const lookup = pipeline.find((s: any) => s.$lookup?.from === 'clientes');
     expect(lookup.$lookup.pipeline).toBeDefined();
     const lookupMatch = lookup.$lookup.pipeline[0].$match.$expr.$and;
@@ -513,6 +530,8 @@ describe('MetricsService — filtro tipo SaaS / Story 7.2', () => {
     await service.getClientsMetrics({ tipo: TipoItem.PRODUCTO });
     const clients = aggregatePipelines[0];
     expect(clients).toBeDefined();
+    const firstMatch = clients.find((s: any) => s.$match?.tenantId);
+    expect(firstMatch.$match.estado).toEqual({ $ne: 'cancelada' });
     const serialized = JSON.stringify(clients);
     expect(serialized).not.toContain('items.tipoSnapshot');
     expect(serialized).not.toContain('tipoSnapshot');

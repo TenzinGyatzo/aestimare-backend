@@ -96,7 +96,7 @@ export class MetricsService {
 
   private async buildMatch(filters?: FilterMetricsDto): Promise<any> {
     const tenantId = this.tenantContext.getTenantId();
-    const match: any = { tenantId };
+    const match: any = { tenantId, estado: { $ne: 'cancelada' } };
     if (filters?.fechaDesde || filters?.fechaHasta) {
       match.fechaCreacion = {};
       if (filters.fechaDesde) {
@@ -446,8 +446,6 @@ export class MetricsService {
     ]);
 
     const emitidas = cotizacionesTotales;
-    // Canceladas no entran al denominador: suelen ser anuladas/sustituidas (p.ej. Repetir), no cierres comerciales.
-    const ofertasValidas = Math.max(0, emitidas - canceladas);
     const result: TotalsMetricDto = {
       cotizacionesHoy,
       cotizacionesMes,
@@ -457,7 +455,7 @@ export class MetricsService {
       cotizacionesAceptadas: aceptadas,
       cotizacionesRechazadas: rechazadas,
       cotizacionesCanceladas: canceladas,
-      tasaConversion: ofertasValidas > 0 ? aceptadas / ofertasValidas : 0,
+      tasaConversion: emitidas > 0 ? aceptadas / emitidas : 0,
       ingresosTotales: ingresos[0]?.total || 0,
       desglosePorTipo: this.mapDesglosePorTipo(desglosePorTipoRows || []),
     };

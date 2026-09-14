@@ -146,15 +146,15 @@ export class TotalsMetricDto {
 
   @ApiProperty({
     description:
-      'Número total de cotizaciones en el alcance del filtro (= cotizacionesEmitidas)',
+      'Número total de cotizaciones en el alcance del filtro (= cotizacionesEmitidas; excluye canceladas)',
     example: 500,
   })
   cotizacionesTotales: number;
 
-  /** Alias de emitidas = count del match de periodo (todas las cotizaciones del filtro). Story 7.1 / FR-43. */
+  /** Alias de emitidas = count del match de periodo sin canceladas. */
   @ApiProperty({
     description:
-      'Cotizaciones emitidas en el alcance del filtro (= cotizacionesTotales del match)',
+      'Cotizaciones emitidas en el alcance del filtro (= cotizacionesTotales; excluye canceladas)',
     example: 500,
   })
   cotizacionesEmitidas: number;
@@ -173,14 +173,14 @@ export class TotalsMetricDto {
 
   @ApiProperty({
     description:
-      'Cotizaciones en estado cancelada (mismo match de periodo; excluidas del denominador de tasaConversion)',
+      'Cotizaciones en estado cancelada (count dedicado; no entran en emitidas ni en tasaConversion)',
     example: 5,
   })
   cotizacionesCanceladas: number;
 
   @ApiProperty({
     description:
-      'Tasa de conversión = aceptadas / (emitidas − canceladas) (0 si el denominador es 0)',
+      'Tasa de conversión = aceptadas / emitidas (0 si emitidas = 0; emitidas ya excluye canceladas)',
     example: 0.35,
   })
   tasaConversion: number;
