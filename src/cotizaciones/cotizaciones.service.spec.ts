@@ -1132,6 +1132,40 @@ describe('CotizacionesService.createAdminCotizacion — defaults de tenant para 
 
     expect(lastPersisted.incluirImagenesPdf).toBe(false);
   });
+
+  it('agregarIva omitido → persiste true (no lee default de tenant)', async () => {
+    tenantConfigService.getForRequest.mockResolvedValue({
+      vigenciaDefaultDias: 30,
+      bancarios: {},
+      defaultIncluirDatosBancarios: false,
+      defaultIncluirDescripciones: false,
+      defaultIncluirImagenesPdf: false,
+    });
+
+    await service.createAdminCotizacion({
+      items: [{ servicioId: servicioId.toString(), cantidad: 1 }],
+    } as any);
+
+    expect(lastPersisted.agregarIva).toBe(true);
+  });
+
+  it('agregarIva false persiste false', async () => {
+    await service.createAdminCotizacion({
+      items: [{ servicioId: servicioId.toString(), cantidad: 1 }],
+      agregarIva: false,
+    } as any);
+
+    expect(lastPersisted.agregarIva).toBe(false);
+  });
+
+  it('agregarIva true persiste true', async () => {
+    await service.createAdminCotizacion({
+      items: [{ servicioId: servicioId.toString(), cantidad: 1 }],
+      agregarIva: true,
+    } as any);
+
+    expect(lastPersisted.agregarIva).toBe(true);
+  });
 });
 
 describe('CotizacionesService.createAdminCotizacion — defaultUsarVigencia → sinVigencia', () => {
@@ -2974,6 +3008,27 @@ describe('CotizacionesService repetirCotizacion (Story 6.12)', () => {
 
     expect(savedPayload.incluirDescripciones).toBe(false); // default tenant
     expect(savedPayload.incluirImagenesPdf).toBe(true); // sin default tenant → true
+    expect(savedPayload.agregarIva).toBe(true); // fuente sin campo → true
+  });
+
+  it('agregarIva false en la fuente se copia al repetir', async () => {
+    jest.spyOn(service, 'findOne').mockImplementation(async (id: string) => {
+      if (String(id) === String(fuenteId) || id === fuenteId) {
+        return { ...fuenteBase(), agregarIva: false } as any;
+      }
+      return {
+        _id: id,
+        folio: 'COT-2026-0099',
+        estado: 'vigente',
+        items: savedPayload?.items,
+        total: savedPayload?.total,
+        magicToken: undefined,
+      } as any;
+    });
+
+    await service.repetirCotizacion(fuenteId, { modoPrecios: 'originales' });
+
+    expect(savedPayload.agregarIva).toBe(false);
   });
 
   it('originales + servicio inactivo: OK (no 400)', async () => {
@@ -3519,6 +3574,22 @@ describe('CotizacionesService previewRepetirCotizacion', () => {
 
     expect(preview.incluirDescripciones).toBe(true); // sin default tenant → true
     expect(preview.incluirImagenesPdf).toBe(false); // default tenant
+    expect(preview.agregarIva).toBe(true); // fuente sin campo → true
+  });
+
+  it('agregarIva false en la fuente llega al preview', async () => {
+    jest.spyOn(service, 'findOne').mockImplementation(async (id: string) => {
+      if (String(id) === String(fuenteId) || id === fuenteId) {
+        return { ...fuenteBase(), agregarIva: false } as any;
+      }
+      return { _id: id } as any;
+    });
+
+    const preview = await service.previewRepetirCotizacion(fuenteId, {
+      modoPrecios: 'originales',
+    });
+
+    expect(preview.agregarIva).toBe(false);
   });
 
   it('actualizados: precios del catálogo', async () => {

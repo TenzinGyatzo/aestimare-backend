@@ -71,6 +71,10 @@ export class RepetirCotizacionPreviewDto {
   @ApiProperty()
   incluirImagenesPdf: boolean;
 
+  /** Desglose IVA 16 %. Fuente sin campo → true. */
+  @ApiProperty()
+  agregarIva: boolean;
+
   @ApiProperty({ type: [RepetirPreviewPlantillaDto] })
   plantillas: RepetirPreviewPlantillaDto[];
 

@@ -507,6 +507,11 @@ export class CotizacionesService {
       this.normalizeClienteFlag(dto.incluirImagenesPdf),
       tenantCfg?.defaultIncluirImagenesPdf,
     );
+    // Sin default de tenant: omitido → true; boolean explícito del body gana.
+    const agregarIva = this.resolveDisplayFlag(
+      this.normalizeClienteFlag(dto.agregarIva),
+      true,
+    );
 
     const emailsPara = this.normalizeEmailList(dto.emailsPara);
     const emailsCc = this.normalizeEmailList(dto.emailsCc).filter(
@@ -530,6 +535,7 @@ export class CotizacionesService {
       incluirDatosBancarios,
       incluirDescripciones,
       incluirImagenesPdf,
+      agregarIva,
       plantillasSnapshot,
       emailsPara,
       emailsCc,
@@ -849,6 +855,7 @@ export class CotizacionesService {
     incluirDatosBancarios: boolean;
     incluirDescripciones: boolean;
     incluirImagenesPdf: boolean;
+    agregarIva: boolean;
   }> {
     let tenantCfg:
       | {
@@ -893,6 +900,8 @@ export class CotizacionesService {
         stored('incluirImagenesPdf'),
         tenantCfg?.defaultIncluirImagenesPdf,
       ),
+      // Copia el flag guardado; fuente sin campo → true (no hay default de tenant).
+      agregarIva: fromFuente(stored('agregarIva'), true),
     };
   }
 
@@ -905,6 +914,7 @@ export class CotizacionesService {
       incluirDatosBancarios: boolean;
       incluirDescripciones: boolean;
       incluirImagenesPdf: boolean;
+      agregarIva: boolean;
     },
   ): RepetirCotizacionPreviewDto {
     const sinVigencia =
@@ -936,6 +946,7 @@ export class CotizacionesService {
       incluirDatosBancarios: flags?.incluirDatosBancarios ?? true,
       incluirDescripciones: flags?.incluirDescripciones ?? true,
       incluirImagenesPdf: flags?.incluirImagenesPdf ?? true,
+      agregarIva: flags?.agregarIva ?? true,
       plantillas: plantillasSnapshot.map((p) => ({
         plantillaId: this.refId(p.plantillaId) || String(p.plantillaId),
         nombre: p.nombreSnapshot,
@@ -1079,6 +1090,7 @@ export class CotizacionesService {
       incluirDatosBancarios: flags.incluirDatosBancarios,
       incluirDescripciones: flags.incluirDescripciones,
       incluirImagenesPdf: flags.incluirImagenesPdf,
+      agregarIva: flags.agregarIva,
       plantillasSnapshot,
       emailsPara,
       emailsCc,
@@ -2413,6 +2425,8 @@ export class CotizacionesService {
       moneda: String(c.moneda || 'MXN'),
       fechaCreacion: toIso(c.fechaCreacion) || new Date(0).toISOString(),
       items,
+      // Ausente o true = IVA activo; solo false lo apaga.
+      agregarIva: c.agregarIva !== false,
     };
     const fvIso = toIso(c.fechaVencimiento);
     if (fvIso) dto.fechaVencimiento = fvIso;

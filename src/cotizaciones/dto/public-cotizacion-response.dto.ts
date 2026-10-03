@@ -148,6 +148,13 @@ export class PublicCotizacionResponseDto {
   })
   incluirDatosBancarios?: boolean;
 
+  @ApiProperty({
+    description:
+      'Desglosar IVA al 16 %. Ausente en el documento se normaliza a true; solo false lo apaga.',
+    example: true,
+  })
+  agregarIva: boolean;
+
   @ApiPropertyOptional({
     type: [PublicPlantillaSnapshotDto],
     description: 'Snapshots de plantillas para páginas PDF tras el cuerpo',

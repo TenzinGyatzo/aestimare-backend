@@ -306,6 +306,20 @@ export class CreateCotizacionAdminDto {
 
   @ApiPropertyOptional({
     description:
+      'Desglosar IVA al 16 %. Boolean explícito del body gana; omitido → true. No hay default de tenant. Cualquier otro tipo → 400.',
+    example: true,
+  })
+  @Transform(({ obj, key, value }) =>
+    key && obj && Object.prototype.hasOwnProperty.call(obj, key)
+      ? (obj as Record<string, unknown>)[key]
+      : value,
+  )
+  @ValidateIf((_, v) => v !== undefined)
+  @IsBoolean()
+  agregarIva?: boolean;
+
+  @ApiPropertyOptional({
+    description:
       'Plantillas a aplicar (orden = páginas tras el cuerpo). Vacío/omitido = ninguna. Story 6.5',
     type: [CreatePlantillaCotizacionDto],
   })

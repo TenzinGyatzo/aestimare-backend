@@ -206,6 +206,14 @@ export class Cotizacion {
   @Prop({ type: Boolean, required: false })
   incluirImagenesPdf?: boolean;
 
+  /**
+   * Sin default mongoose: ausente ≠ false (lectura = IVA activo).
+   * El service escribe boolean explícito al crear y al repetir.
+   * Solo false apaga el desglose de IVA al 16 %.
+   */
+  @Prop({ type: Boolean, required: false })
+  agregarIva?: boolean;
+
   /** Plantillas aplicadas (deep copy). Vacío/omitido = sin páginas de plantilla. */
   @Prop({ type: [Object], default: [] })
   plantillasSnapshot?: PlantillaSnapshot[];
