@@ -637,11 +637,13 @@ describe('TenantConfigService (Stories 2.1–2.5 + 3.2)', () => {
       defaultIncluirDescripciones: false,
       defaultIncluirImagenesPdf: true,
       defaultUsarVigencia: false,
+      defaultAgregarIva: false,
     } as any);
     expect(updated.defaultIncluirDatosBancarios).toBe(true);
     expect(updated.defaultIncluirDescripciones).toBe(false);
     expect(updated.defaultIncluirImagenesPdf).toBe(true);
     expect(updated.defaultUsarVigencia).toBe(false);
+    expect(updated.defaultAgregarIva).toBe(false);
   });
 
   it('updateVigenciaBancarios con null ausenta los defaults (vuelve a "sin configurar")', async () => {
@@ -651,17 +653,20 @@ describe('TenantConfigService (Stories 2.1–2.5 + 3.2)', () => {
       defaultIncluirDescripciones: false,
       defaultIncluirImagenesPdf: true,
       defaultUsarVigencia: false,
+      defaultAgregarIva: false,
     });
     const updated = await service.updateVigenciaBancarios({
       defaultIncluirDatosBancarios: null,
       defaultIncluirDescripciones: null,
       defaultIncluirImagenesPdf: null,
       defaultUsarVigencia: null,
+      defaultAgregarIva: null,
     } as any);
     expect(updated.defaultIncluirDatosBancarios).toBeUndefined();
     expect(updated.defaultIncluirDescripciones).toBeUndefined();
     expect(updated.defaultIncluirImagenesPdf).toBeUndefined();
     expect(updated.defaultUsarVigencia).toBeUndefined();
+    expect(updated.defaultAgregarIva).toBeUndefined();
   });
 
   it('updateVigenciaBancarios omitido no toca los defaults existentes', async () => {
@@ -669,12 +674,14 @@ describe('TenantConfigService (Stories 2.1–2.5 + 3.2)', () => {
       ...makeDoc(tenantId),
       defaultIncluirDatosBancarios: true,
       defaultUsarVigencia: false,
+      defaultAgregarIva: false,
     });
     const updated = await service.updateVigenciaBancarios({
       vigenciaDefaultDias: 45,
     });
     expect(updated.defaultIncluirDatosBancarios).toBe(true);
     expect(updated.defaultUsarVigencia).toBe(false);
+    expect(updated.defaultAgregarIva).toBe(false);
     expect(updated.vigenciaDefaultDias).toBe(45);
   });
 
@@ -685,6 +692,7 @@ describe('TenantConfigService (Stories 2.1–2.5 + 3.2)', () => {
     expect(res.defaultIncluirDescripciones).toBeUndefined();
     expect(res.defaultIncluirImagenesPdf).toBeUndefined();
     expect(res.defaultUsarVigencia).toBeUndefined();
+    expect(res.defaultAgregarIva).toBeUndefined();
   });
 
   it('toResponse incluye defaults de cotización true/false explícitos', () => {
@@ -694,12 +702,14 @@ describe('TenantConfigService (Stories 2.1–2.5 + 3.2)', () => {
       defaultIncluirDescripciones: true,
       defaultIncluirImagenesPdf: false,
       defaultUsarVigencia: true,
+      defaultAgregarIva: false,
     } as any;
     const res = service.toResponse(doc);
     expect(res.defaultIncluirDatosBancarios).toBe(false);
     expect(res.defaultIncluirDescripciones).toBe(true);
     expect(res.defaultIncluirImagenesPdf).toBe(false);
     expect(res.defaultUsarVigencia).toBe(true);
+    expect(res.defaultAgregarIva).toBe(false);
   });
 
   it('toResponse incluye zonaHoraria IANA (Story 9.1 / AD-30)', () => {

@@ -1133,7 +1133,7 @@ describe('CotizacionesService.createAdminCotizacion — defaults de tenant para 
     expect(lastPersisted.incluirImagenesPdf).toBe(false);
   });
 
-  it('agregarIva omitido → persiste true (no lee default de tenant)', async () => {
+  it('agregarIva omitido y tenant sin default → persiste true', async () => {
     tenantConfigService.getForRequest.mockResolvedValue({
       vigenciaDefaultDias: 30,
       bancarios: {},
@@ -1144,6 +1144,35 @@ describe('CotizacionesService.createAdminCotizacion — defaults de tenant para 
 
     await service.createAdminCotizacion({
       items: [{ servicioId: servicioId.toString(), cantidad: 1 }],
+    } as any);
+
+    expect(lastPersisted.agregarIva).toBe(true);
+  });
+
+  it('agregarIva omitido usa defaultAgregarIva del tenant', async () => {
+    tenantConfigService.getForRequest.mockResolvedValue({
+      vigenciaDefaultDias: 30,
+      bancarios: {},
+      defaultAgregarIva: false,
+    });
+
+    await service.createAdminCotizacion({
+      items: [{ servicioId: servicioId.toString(), cantidad: 1 }],
+    } as any);
+
+    expect(lastPersisted.agregarIva).toBe(false);
+  });
+
+  it('agregarIva explícito gana al default del tenant', async () => {
+    tenantConfigService.getForRequest.mockResolvedValue({
+      vigenciaDefaultDias: 30,
+      bancarios: {},
+      defaultAgregarIva: false,
+    });
+
+    await service.createAdminCotizacion({
+      items: [{ servicioId: servicioId.toString(), cantidad: 1 }],
+      agregarIva: true,
     } as any);
 
     expect(lastPersisted.agregarIva).toBe(true);

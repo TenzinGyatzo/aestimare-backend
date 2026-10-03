@@ -475,6 +475,7 @@ export class CotizacionesService {
           defaultIncluirDescripciones?: boolean | null;
           defaultIncluirImagenesPdf?: boolean | null;
           defaultUsarVigencia?: boolean | null;
+          defaultAgregarIva?: boolean | null;
         }
       | undefined;
     try {
@@ -507,10 +508,10 @@ export class CotizacionesService {
       this.normalizeClienteFlag(dto.incluirImagenesPdf),
       tenantCfg?.defaultIncluirImagenesPdf,
     );
-    // Sin default de tenant: omitido → true; boolean explícito del body gana.
+    // Boolean explícito del body gana; omitido → default del tenant ?? true.
     const agregarIva = this.resolveDisplayFlag(
       this.normalizeClienteFlag(dto.agregarIva),
-      true,
+      tenantCfg?.defaultAgregarIva,
     );
 
     const emailsPara = this.normalizeEmailList(dto.emailsPara);

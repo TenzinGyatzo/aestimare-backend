@@ -306,7 +306,7 @@ export class CreateCotizacionAdminDto {
 
   @ApiPropertyOptional({
     description:
-      'Desglosar IVA al 16 %. Boolean explícito del body gana; omitido → true. No hay default de tenant. Cualquier otro tipo → 400.',
+      'Desglosar IVA al 16 %. Boolean explícito del body gana; omitido → default del tenant `defaultAgregarIva` ?? true. Cualquier otro tipo → 400.',
     example: true,
   })
   @Transform(({ obj, key, value }) =>

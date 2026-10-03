@@ -117,6 +117,10 @@ export class TenantConfig {
   @Prop({ type: Boolean, required: false, default: undefined })
   defaultUsarVigencia?: boolean | null;
 
+  /** Default «Agregar IVA» al crear cotización. Ausente → cotizador usa true. */
+  @Prop({ type: Boolean, required: false, default: undefined })
+  defaultAgregarIva?: boolean | null;
+
   /**
    * Zona IANA del Reloj del tenant (AD-30 / Story 9.1).
    * Ausente → backfill / fallback de servicio: America/Mexico_City.

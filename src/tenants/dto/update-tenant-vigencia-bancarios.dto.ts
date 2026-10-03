@@ -140,4 +140,14 @@ export class UpdateTenantVigenciaBancariosDto {
   @IsOptional()
   @IsBoolean({ message: 'defaultUsarVigencia debe ser boolean o null' })
   defaultUsarVigencia?: boolean | null;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    nullable: true,
+    description:
+      'Default "Agregar IVA" al crear cotización nueva. true/false configura; null limpia (sin configurar → cotizador usa true); omitido = no tocar.',
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'defaultAgregarIva debe ser boolean o null' })
+  defaultAgregarIva?: boolean | null;
 }

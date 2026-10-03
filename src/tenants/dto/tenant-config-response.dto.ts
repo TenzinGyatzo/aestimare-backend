@@ -140,6 +140,14 @@ export class TenantConfigResponseDto {
   defaultUsarVigencia?: boolean | null;
 
   @ApiPropertyOptional({
+    type: Boolean,
+    nullable: true,
+    description:
+      'Default "Agregar IVA" al crear cotización nueva. Ausente = sin configurar (el cotizador usa true).',
+  })
+  defaultAgregarIva?: boolean | null;
+
+  @ApiPropertyOptional({
     description:
       'Zona IANA del Reloj del tenant (AD-30). Ausente hasta backfill; service usa America/Mexico_City.',
     example: 'America/Mexico_City',

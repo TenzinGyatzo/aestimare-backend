@@ -419,6 +419,7 @@ export class TenantConfigService {
       dto.defaultIncluirImagenesPdf,
     );
     applyBooleanField('defaultUsarVigencia', dto.defaultUsarVigencia);
+    applyBooleanField('defaultAgregarIva', dto.defaultAgregarIva);
 
     if (dto.bancarios === null) {
       $unset.bancarios = 1;
@@ -625,6 +626,10 @@ export class TenantConfigService {
       defaultUsarVigencia:
         typeof obj.defaultUsarVigencia === 'boolean'
           ? obj.defaultUsarVigencia
+          : undefined,
+      defaultAgregarIva:
+        typeof obj.defaultAgregarIva === 'boolean'
+          ? obj.defaultAgregarIva
           : undefined,
       zonaHoraria:
         typeof obj.zonaHoraria === 'string' && obj.zonaHoraria.trim()
