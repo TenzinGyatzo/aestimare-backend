@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ClientesService } from './clientes.service';
+import { ClienteIndexSyncService } from './cliente-index-sync.service';
 import { ClientesController } from './clientes.controller';
 import { ContactosService } from './contactos.service';
 import { ContactosController } from './contactos.controller';
@@ -20,7 +21,7 @@ import {
     ]),
   ],
   controllers: [ClientesController, ContactosController],
-  providers: [ClientesService, ContactosService],
+  providers: [ClientesService, ContactosService, ClienteIndexSyncService],
   exports: [ClientesService, ContactosService],
 })
 export class ClientesModule {}
